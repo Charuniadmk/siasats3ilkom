@@ -4,6 +4,7 @@ import { ChevronDown, GraduationCap, ShieldCheck, X } from "lucide-react";
 import {
   flattenNavigation,
   navigation,
+  studentNavigation,
   type NavigationItem,
 } from "./navigation";
 
@@ -97,11 +98,14 @@ function MenuItem({
 export default function Sidebar({
   onNavigate,
   onClose,
+  role = "ADMIN",
 }: {
   onNavigate?: () => void;
   onClose?: () => void;
+  role?: "ADMIN" | "STUDENT";
 }) {
   const { pathname } = useLocation();
+  const items = role === "STUDENT" ? studentNavigation : navigation;
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="flex h-20 shrink-0 items-center gap-3 border-b border-border px-6">
@@ -124,7 +128,7 @@ export default function Sidebar({
         )}
       </div>
       <nav
-        aria-label="Navigasi admin"
+        aria-label={role === "STUDENT" ? "Navigasi mahasiswa" : "Navigasi admin"}
         className="flex-1 overflow-y-auto px-4 py-6"
       >
         {(
@@ -133,13 +137,13 @@ export default function Sidebar({
             { key: "akademik", label: "Akademik" },
             { key: "master", label: "Data master" },
           ] as const
-        ).map((section) => (
+        ).filter((section) => items.some((item) => item.section === section.key)).map((section) => (
           <div key={section.key} className="mb-7 last:mb-0">
             <p className="mb-3 px-3 text-[10px] font-semibold tracking-[0.16em] text-slate-400 uppercase">
               {section.label}
             </p>
             <ul className="space-y-1">
-              {navigation
+              {items
                 .filter((item) => item.section === section.key)
                 .map((item) => (
                   <MenuItem
@@ -155,7 +159,7 @@ export default function Sidebar({
       <div className="m-4 flex shrink-0 items-center gap-3 rounded-xl border border-border bg-surface p-3.5">
         <ShieldCheck size={18} className="text-accent" aria-hidden="true" />
         <div>
-          <p className="text-xs font-semibold">Ruang administrasi</p>
+          <p className="text-xs font-semibold">{role === "STUDENT" ? "Ruang mahasiswa" : "Ruang administrasi"}</p>
           <p className="mt-1 text-[11px] text-secondary">
             Manajemen mahasiswa doktor
           </p>

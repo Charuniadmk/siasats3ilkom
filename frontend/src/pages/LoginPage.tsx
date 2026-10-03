@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { ArrowRight, Eye, EyeOff, GraduationCap, IdCard, LoaderCircle, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import Button from '../components/ui/Button';
@@ -29,6 +29,9 @@ function formSchema(role: Role) {
 type LoginFields = z.infer<ReturnType<typeof formSchema>>;
 
 export default function LoginPage() {
+  const location = useLocation();
+  const state: unknown = location.state;
+  const passwordChanged = typeof state === 'object' && state !== null && 'passwordChanged' in state && state.passwordChanged === true;
   const [role, setRole] = useState<Role>('STUDENT');
   const [showPassword, setShowPassword] = useState(false);
   const session = useAuth();
@@ -107,7 +110,7 @@ export default function LoginPage() {
           <h2 className="text-3xl font-semibold tracking-tight">Masuk ke akun Anda</h2>
           <p className="mt-3 text-sm leading-6 text-secondary">Pilih jenis akun dan masukkan data Anda.</p>
 
-          <div className="mt-8"><RadioGroup name="account-role" label="Jenis akun" value={role} onValueChange={switchRole} disabled={mutation.isPending} options={[{ value: 'STUDENT', label: 'Mahasiswa', icon: <GraduationCap size={17} aria-hidden="true" /> }, { value: 'ADMIN', label: 'Admin', icon: <ShieldCheck size={17} aria-hidden="true" /> }]} /></div>
+          <div className="mt-8">{passwordChanged && <p role="status" className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">Password berhasil diubah. Silakan masuk kembali dengan password baru.</p>}<RadioGroup name="account-role" label="Jenis akun" value={role} onValueChange={switchRole} disabled={mutation.isPending} options={[{ value: 'STUDENT', label: 'Mahasiswa', icon: <GraduationCap size={17} aria-hidden="true" /> }, { value: 'ADMIN', label: 'Admin', icon: <ShieldCheck size={17} aria-hidden="true" /> }]} /></div>
 
           <form className="mt-7 space-y-5" onSubmit={(event) => { void submit(event); }} noValidate>
             <FormField id="identifier" label={isAdmin ? 'Username' : 'Nomor Induk Mahasiswa (NIM)'} error={form.formState.errors.identifier?.message}>

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { hash } from 'bcrypt';
+import { compare, hash } from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 process.env.JWT_SECRET = randomBytes(48).toString('hex');
@@ -108,6 +108,8 @@ test('Login MySQL, akses akun mahasiswa khusus Admin, sesi, origin, dan pembatas
     });
     if (role === 'ADMIN') {
       assert.equal((await fetch(studentsUrl)).status, 401);
+      assert.equal((await fetch(base.replace('/auth', '/profile'))).status, 401);
+      assert.equal((await fetch(base.replace('/auth', '/profile'), { headers: { Cookie: cookie } })).status, 403);
       assert.equal((await postStudent({ nim: newNim, password: studentPassword }, 'https://untrusted.example')).status, 403);
       assert.equal((await postStudent({ nim: newNim, password: 'pendek' })).status, 400);
       assert.equal((await postStudent({ nim: newNim, password: studentPassword, fullName: '' })).status, 400);
@@ -175,6 +177,33 @@ test('Login MySQL, akses akun mahasiswa khusus Admin, sesi, origin, dan pembatas
       assert.equal((await modify('DELETE')).status, 200);
       assert.equal((await modify('DELETE')).status, 404);
     } else {
+      const profileUrl = base.replace('/auth', '/profile');
+      const personal = await fetch(profileUrl, { headers: { Cookie: cookie } });
+      assert.equal(personal.status, 200);
+      const personalBody = await personal.json();
+      assert.equal(personalBody.data.id, body.data.id);
+      assert.equal('passwordHash' in personalBody.data, false);
+      const otherStudent = await prisma.user.create({ data: { role: 'STUDENT', nim: identifier + '999', fullName: 'Profil mahasiswa lain', passwordHash: await hash(studentPassword, 12) } });
+      createdIds.push(otherStudent.id);
+      const patchProfile = (data: object, origin = new URL(env.FRONTEND_URL).origin) => fetch(profileUrl, {
+        method: 'PATCH', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      for (const protectedField of [{ id: otherStudent.id }, { userId: otherStudent.id }, { role: 'ADMIN' }, { nim: otherStudent.nim }, { password: studentPassword }]) {
+        assert.equal((await patchProfile({ ...profile, ...protectedField })).status, 400);
+      }
+      assert.equal((await patchProfile(profile, 'https://untrusted.example')).status, 403);
+      assert.equal((await patchProfile({ ...profile, birthDate: '2100-01-01' })).status, 400);
+      const savedProfile = await patchProfile(profile);
+      assert.equal(savedProfile.status, 200);
+      const savedBody = await savedProfile.json();
+      assert.equal(savedBody.data.id, body.data.id);
+      assert.equal(savedBody.data.nim, identifier);
+      assert.equal(savedBody.data.fullName, profile.fullName);
+      assert.equal('passwordHash' in savedBody.data, false);
+      assert.equal((await prisma.user.findUnique({ where: { id: otherStudent.id } }))?.fullName, 'Profil mahasiswa lain');
+      assert.equal((await fetch(profileUrl + '/' + otherStudent.id, { headers: { Cookie: cookie } })).status, 404);
+      assert.equal((await fetch(base + '/me', { headers: { Cookie: cookie } })).status, 200);
+
       assert.equal((await fetch(studentsUrl, { headers: { Cookie: cookie } })).status, 403);
       assert.equal((await postStudent({ nim: `${newNim}2`, password: studentPassword })).status, 403);
     }
@@ -187,6 +216,45 @@ test('Login MySQL, akses akun mahasiswa khusus Admin, sesi, origin, dan pembatas
     assert.ok(logout.headers.get('set-cookie')?.includes('Expires=Thu, 01 Jan 1970'));
     assert.equal((await fetch(`${base}/me`, { headers: { Cookie: cookie } })).status, 401);
   }
+
+
+  const studentAccount = await prisma.user.findFirstOrThrow({ where: { nim: identifier, role: 'STUDENT' } });
+  const passwordCookie = 'session=' + signSession({ userId: studentAccount.id, role: 'STUDENT', sessionVersion: studentAccount.sessionVersion });
+  const passwordUrl = base.replace('/auth', '/profile/password');
+  const newPassword = randomBytes(24).toString('hex');
+  const passwordInput = { currentPassword: studentPassword, newPassword, confirmPassword: newPassword };
+  const changePassword = (data: object, cookie = passwordCookie, origin = new URL(env.FRONTEND_URL).origin) => fetch(passwordUrl, {
+    method: 'PATCH', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  });
+  assert.equal((await changePassword(passwordInput, '')).status, 401);
+  const adminAccount = await prisma.user.findFirstOrThrow({ where: { username: identifier, role: 'ADMIN' } });
+  const adminCookie = 'session=' + signSession({ userId: adminAccount.id, role: 'ADMIN', sessionVersion: adminAccount.sessionVersion });
+  assert.equal((await changePassword(passwordInput, adminCookie)).status, 403);
+  assert.equal((await changePassword(passwordInput, passwordCookie, 'https://untrusted.example')).status, 403);
+  for (const invalid of [
+    { ...passwordInput, currentPassword: 'password-salah' },
+    { ...passwordInput, confirmPassword: 'tidak-sama' },
+    { ...passwordInput, newPassword: 'pendek', confirmPassword: 'pendek' },
+    { ...passwordInput, id: adminAccount.id },
+    { ...passwordInput, newPassword: studentPassword, confirmPassword: studentPassword },
+  ]) assert.equal((await changePassword(invalid)).status, 400);
+  assert.equal((await fetch(base + '/me', { headers: { Cookie: passwordCookie } })).status, 200);
+  const unchanged = await prisma.user.findUniqueOrThrow({ where: { id: studentAccount.id } });
+  assert.equal(unchanged.passwordHash, studentAccount.passwordHash);
+  assert.equal(unchanged.sessionVersion, studentAccount.sessionVersion);
+  const changed = await changePassword(passwordInput);
+  assert.equal(changed.status, 200);
+  assert.ok(changed.headers.get('set-cookie')?.includes('Expires=Thu, 01 Jan 1970'));
+  assert.deepEqual(await changed.json(), { success: true, message: 'Password berhasil diubah. Silakan masuk kembali dengan password baru.' });
+  const savedPassword = await prisma.user.findUniqueOrThrow({ where: { id: studentAccount.id } });
+  assert.equal(await compare(newPassword, savedPassword.passwordHash), true);
+  assert.equal(await compare(studentPassword, savedPassword.passwordHash), false);
+  assert.equal(savedPassword.sessionVersion, studentAccount.sessionVersion + 1);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: adminAccount.id } })).passwordHash, adminAccount.passwordHash);
+  assert.equal((await fetch(base + '/me', { headers: { Cookie: passwordCookie } })).status, 401);
+  assert.equal((await changePassword(passwordInput)).status, 401);
+  assert.equal((await postLogin({ role: 'STUDENT', nim: identifier, password: studentPassword })).status, 401);
+  assert.equal((await postLogin({ role: 'STUDENT', nim: identifier, password: newPassword })).status, 200);
 
   let limited: Response | undefined;
   for (let attempt = 0; attempt < 21; attempt++) {

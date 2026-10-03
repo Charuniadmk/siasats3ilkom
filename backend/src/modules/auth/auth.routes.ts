@@ -1,6 +1,6 @@
-import { Router, type CookieOptions } from 'express';
+import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { env } from '../../config/env.js';
+import { sessionCookieOptions as cookieOptions } from './session-cookie.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { trustedOrigin } from '../../middleware/trusted-origin.js';
 import { HttpError } from '../../utils/http-error.js';
@@ -8,10 +8,6 @@ import { loginSchema } from './auth.schema.js';
 import { login, revokeSessions, sessionDurationSeconds } from './auth.service.js';
 
 export const authRouter = Router();
-
-const cookieOptions: CookieOptions = {
-  httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: 'lax', path: '/api',
-};
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

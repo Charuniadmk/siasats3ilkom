@@ -1,6 +1,6 @@
 # Sistem Manajemen Mahasiswa Doktor
 
-Sistem manajemen akademik mahasiswa doktor dengan halaman login Admin (username dan password) serta Mahasiswa (NIM dan password). Autentikasi menggunakan MySQL, bcrypt, dan JWT dalam cookie HttpOnly. Admin memiliki sidebar, header, halaman sambutan, serta menu untuk menambah dan melihat akun mahasiswa. Fitur akademik lainnya masih berupa halaman placeholder; mahasiswa melihat konfirmasi sesi sederhana.
+Sistem manajemen akademik mahasiswa doktor dengan halaman login Admin (username dan password) serta Mahasiswa (NIM dan password). Autentikasi menggunakan MySQL, bcrypt, dan JWT dalam cookie HttpOnly. Admin memiliki sidebar, header, halaman sambutan, serta menu untuk menambah dan melihat akun mahasiswa. Proposal dan Kualifikasi memiliki pengajuan terpadu, pembuatan PDF, unggahan dokumen, serta pemeriksaan Admin. Mahasiswa dapat memperbarui profil dan password. Halaman Dosen dan Ruangan masih berupa placeholder.
 
 ## Teknologi dan persyaratan
 
@@ -325,3 +325,102 @@ Semua halaman memakai `Input`, `Textarea`, `Select`, `InputDate`, `Checkbox`, da
 `Select` menerima `value`, `options: { value, label, disabled? }[]`, dan `onValueChange`. Menu pilihan memakai popover agar tidak terpotong oleh tabel atau dialog, mengikuti posisi field saat halaman bergulir, serta mendukung tombol panah, Home/End, pencarian lewat keyboard, Enter, Escape, dan klik di luar. Gunakan Controller untuk integrasi Select dengan React Hook Form.
 
 `InputDate` menggunakan kalender DatePicker yang sudah tersedia, menerima tanggal YYYY-MM-DD melalui `value`/`onChange`, dan mendukung batas `min`/`max`. Tanggal lahir serta kedua filter tanggal mahasiswa memakai komponen ini; select bulan/tahun dan data per halaman juga memakai Select yang sama. Pencarian, filter, urutan, dan pagination tetap diproses backend.
+
+## Area mahasiswa dan profil pribadi
+
+Setelah login sebagai Mahasiswa, aplikasi mengarahkan ke `/dashboard`. Sidebar menampilkan Dashboard, Proposal, Kualifikasi, Dosen, Ruangan, serta Profil. Proposal dan Kualifikasi tidak memiliki submenu. Layout menggunakan AcademicLayout bersama agar header, drawer mobile, dan tampilan tetap konsisten. Halaman khusus Admin tetap menolak akses Mahasiswa, termasuk ketika URL dimasukkan langsung. Proposal dan Kualifikasi menggunakan halaman pengajuan terpadu; Dosen dan Ruangan masih memakai placeholder.
+
+Halaman `/profile` menampilkan profil mahasiswa dari `GET /api/profile`. Mahasiswa dapat memperbarui nama lengkap, jenis kelamin, alamat, dan tanggal lahir melalui `PATCH /api/profile`; NIM ditampilkan hanya baca dan tetap dikelola Admin. Seluruh field menggunakan komponen reusable. Setelah tersimpan, nama pada header diperbarui dan sesi tetap aktif.
+
+Backend hanya mengizinkan role STUDENT untuk endpoint profil, mengambil ID dari sesi yang terverifikasi, dan tidak menerima ID target dari request. Body divalidasi secara strict: perubahan ID, NIM, role, atau password ditolak. PATCH memeriksa Origin. Respons tidak menyertakan hash password dan memakai Cache-Control no-store. Tes integrasi MySQL memeriksa bahwa mahasiswa lain tidak berubah, akses Admin ditolak, dan input identitas/role tidak dapat disisipkan. Tidak ada migrasi database tambahan untuk fitur ini.
+
+Mahasiswa dapat mengubah password melalui form Ubah Password di halaman Profil. `PATCH /api/profile/password` menerima `currentPassword`, `newPassword`, dan `confirmPassword`; backend memverifikasi password saat ini, membatasi percobaan, dan menolak password baru yang sama atau konfirmasi yang berbeda. Password baru minimal 8 karakter dan maksimal 72 byte, disimpan menggunakan bcrypt. Setelah berhasil, seluruh sesi akun dicabut dan mahasiswa diarahkan ke login dengan pemberitahuan untuk masuk menggunakan password baru. Endpoint hanya menggunakan identitas mahasiswa dari sesi.
+
+## Pengajuan Proposal dan Kualifikasi terpadu
+
+Requirement pengajuan terbaru menggantikan rancangan submenu akademik pada bagian awal README. Acuan isi formulir adalah `backend/assets/forms/Formulir pendaftaran ujian proposal Disertasi.doc` dan `backend/assets/forms/FORM UJIAN KUALIFIKASI.docx`. File acuan tetap disimpan. PDF Proposal mengisi `backend/assets/forms/proposal-template.pdf`, hasil konversi dokumen Proposal asli menggunakan LibreOffice 24.2.7 dengan Times New Roman dan Calibri. Kop, gambar, teks statis, tabel, ukuran huruf, serta dua halaman dipertahankan. Kontak header berada di kanan kop; bagian telepon, judul, pembimbing, dan persyaratan halaman pertama mengikuti jumlah baris isian sehingga tidak menyisakan baris kosong berlebihan. Section teks asli tersimpan di `proposal-sections.pdf`. Hash dokumen sumber diperiksa terhadap `proposal-template.json`; perubahan dokumen sumber harus disertai pembaruan template. Kualifikasi tetap menggunakan generator sebelumnya. Tanda tangan pembimbing tidak dibuat otomatis.
+
+### Halaman dan sidebar
+
+- Mahasiswa: `/dashboard`, `/proposal`, `/qualification`, `/lecturers`, `/rooms`, `/profile`.
+- Admin: `/dashboard`, `/admin/proposals`, `/admin/proposals/:id`, `/admin/qualifications`, `/admin/qualifications/:id`; menu Mahasiswa serta Dosen/Ruangan yang sudah ada tetap tersedia.
+- Proposal dan Kualifikasi berupa tautan tunggal tanpa submenu. URL submenu lama milik mahasiswa diarahkan ke halaman pengajuan terpadu. Profil dan ubah password tetap tersedia.
+
+### Flow pengajuan
+
+Proposal mewajibkan Formulir Proposal yang dibuat aplikasi, Kuitansi Pembayaran PDF, Draft Proposal PDF, dan Transkrip Nilai PDF. Kualifikasi mewajibkan Form Kualifikasi yang dibuat aplikasi dan Draft Artikel yang Dipublikasikan PDF. Form memuat kontak, judul, pembimbing, program studi, kota, dan tanggal, dengan identitas dari profil mahasiswa. Date picker dan input memakai komponen reusable.
+
+Mahasiswa dapat menyimpan draft yang belum lengkap. Unggah tanda tangan PNG transparan sebelum membuat PDF. PNG maksimal 2 MB, maksimal 4 juta piksel, memiliki transparansi dan isi terlihat. Backend menormalisasi PNG dan menempatkannya dengan rasio asli dalam area mahasiswa. Proposal memakai zona 160 x 24 pt pada kedua halaman. Pada halaman pertama x=324.1, y=642; pada halaman kedua x=72.1, y=427 (koordinat dari kiri atas). Kualifikasi memakai zona tetap `x=350, y=120, width=160, height=70` pt dari kiri bawah. Request tidak menerima posisi atau ukuran tanda tangan. Sumber PNG tidak menjadi dokumen pengajuan final.
+
+Perubahan isi form atau tanda tangan membatalkan PDF form sebelumnya. Mahasiswa harus membuat ulang PDF. Proposal tetap dua halaman: data yang tidak muat ditolak dengan pesan untuk meringkas isi, tanpa mengubah ukuran huruf atau memotong teks. Kualifikasi mendukung halaman lanjutan untuk data panjang. Setelah semua dokumen lengkap, Kirim Pengajuan aktif. Backend memeriksa ulang kelengkapan dan validitas PDF saat pengiriman.
+
+| Status internal | Label | Hak mahasiswa |
+|---|---|---|
+| DRAFT | Draft | Ubah, unggah, buat PDF, kirim |
+| PENDING | Menunggu Pemeriksaan | Lihat, pratinjau, unduh |
+| APPROVED | Disetujui | Lihat, pratinjau, unduh |
+| REJECTED | Ditolak | Lihat alasan, perbaiki, unggah, buat ulang PDF, kirim ulang |
+
+Transisi hanya melalui backend: mahasiswa DRAFT/REJECTED ke PENDING, Admin PENDING ke APPROVED/REJECTED. Penolakan wajib disertai alasan. Pengiriman ulang menghapus hasil review sebelumnya. Semua mutasi memakai transaksi ReadCommitted dengan penguncian baris sehingga pengiriman, unggahan, dan review bersamaan tidak melewati aturan status.
+
+### API
+
+Gunakan `{module}` = `proposals` atau `qualifications`:
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| GET | `/api/{module}/me` | Pengajuan mahasiswa sendiri; buat draft awal jika belum ada |
+| PATCH | `/api/{module}/me` | Simpan isi formulir draft |
+| POST | `/api/{module}/me/documents/:type` | Unggah satu file melalui multipart field `file` |
+| POST | `/api/{module}/me/generate` | Buat PDF dari form tersimpan dan tanda tangan |
+| POST | `/api/{module}/me/submit` | Validasi dan kirim pengajuan |
+| GET | `/api/{module}/me/documents/:documentId` | Pratinjau dokumen milik sendiri |
+| GET | `/api/admin/{module}` | Daftar dengan search, filter status, sorting, pagination backend |
+| GET | `/api/admin/{module}/:id` | Detail pengajuan |
+| GET | `/api/admin/{module}/:id/documents/:documentId` | Dokumen pengajuan untuk Admin |
+| PATCH | `/api/admin/{module}/:id/review` | `{decision:"APPROVED"}` atau `{decision:"REJECTED",reason:"..."}` |
+
+Jenis unggahan Proposal: PAYMENT_RECEIPT, PROPOSAL_DRAFT, TRANSCRIPT. Kualifikasi: PUBLISHED_ARTICLE_DRAFT. Kedua modul menerima SIGNATURE sebagai sumber PNG. PROPOSAL_FORM/QUALIFICATION_FORM tidak dapat diunggah manual. Daftar mendukung `search`, `status`, `page`, `limit`, `sortBy` (fullName/nim/submittedAt/status), `sortOrder` (asc/desc).
+
+### Pratinjau, penyimpanan, dan review
+
+Komponen `PdfPreview` mengambil file melalui Axios dengan cookie autentikasi, menampilkan blob pada iframe dalam dialog, dan membersihkan URL blob saat ditutup. Unduh PDF mengambil file yang sama tanpa unduhan otomatis. Endpoint file mendukung `?download=1` untuk respons attachment. Endpoint memeriksa role dan ownership; file tidak tersedia melalui static public URL dan tidak mengirim path lokal dalam JSON.
+
+Admin membuka detail, memeriksa semua PDF, lalu Setujui melalui dialog konfirmasi atau Tolak melalui dialog alasan wajib. Tombol pemeriksaan hanya tersedia pada PENDING; backend menerapkan aturan yang sama. Tidak ada pengiriman email.
+
+`MAX_DOCUMENT_SIZE_MB=10` mengatur batas PDF pada backend dan dikirim ke frontend. Backend memeriksa MIME, ekstensi, header, dan keterbacaan PDF serta menolak PDF terenkripsi. `UPLOAD_DIR=uploads` menempatkan file privat di folder backend; database hanya menyimpan metadata. Penggantian dokumen membersihkan file lama setelah transaksi berhasil. Penghapusan akun mahasiswa juga membersihkan berkas pengajuannya. Percobaan unggahan/pembuatan PDF dibatasi per akun.
+
+### Database dan file implementasi
+
+Migrasi `backend/prisma/migrations/20261004000200_add_academic_submissions/migration.sql` menambah Submission, SubmissionDocument, enum jenis/status/dokumen, relasi mahasiswa/pemeriksa, serta indeks. Tidak menghapus tabel atau data lama. Migrasi telah dijalankan pada database lokal. Untuk lingkungan lain:
+
+```sh
+npm --prefix backend run prisma:deploy
+```
+
+Implementasi utama berada di `backend/src/modules/submissions`, `frontend/src/features/submissions`, `frontend/src/components/common/PdfPreview.tsx`, `frontend/src/components/ui/SubmissionBadge.tsx`, route/navigation, dan halaman dashboard mahasiswa. Generator PDF memakai pdf-lib; validasi PNG memakai sharp; multipart memakai multer.
+
+### Verifikasi
+
+```powershell
+$env:AUTH_DATABASE_TESTS='1'
+npm --prefix backend test
+$env:PLAYWRIGHT_BROWSER_CHANNEL='chrome'
+npm --prefix frontend run test:e2e
+npm --prefix backend run typecheck
+npm --prefix frontend run typecheck
+npm --prefix backend run lint
+npm --prefix frontend run lint
+npm --prefix backend run build
+npm --prefix frontend run build
+```
+
+Tes integrasi memakai akun sementara dan membersihkan dokumennya. Tes memeriksa kedua flow status, semua unggahan, ukuran/MIME/file palsu, PNG transparan, pembatalan PDF setelah perubahan form, akses dokumen privat, role, origin, filter, serta request kirim/review bersamaan. Tes browser menguji form, PDF, unduhan, kelengkapan, penguncian, alasan penolakan, kirim ulang, review Admin, desktop/mobile, dan regresi profil/password. Fixture PDF browser tersimpan di `frontend/tests/fixtures/sample.pdf`, sehingga tidak bergantung pada output tes backend. Hasil PDF normal dan panjang diperiksa secara visual.
+
+### Font PDF Proposal
+
+Server Windows membaca Times New Roman (`times.ttf`) dan Calibri (`calibri.ttf`) dari folder Fonts Windows. Pada server lain, sediakan kedua font asli dengan izin penggunaan yang sesuai dan atur `PROPOSAL_TIMES_FONT_PATH` serta `PROPOSAL_CALIBRI_FONT_PATH` ke lokasi file. Font pengganti ditolak agar tipografi tetap konsisten. LibreOffice hanya dipakai saat menyiapkan template; tidak diperlukan untuk setiap pembuatan PDF. Berkas font Windows tidak disalin ke repository.
+
+Pembaruan aset Proposal dari PDF ekspor dokumen acuan: `python backend/scripts/prepare-proposal-template.py path/to/export.pdf` (memerlukan PyMuPDF untuk persiapan aset saja). Periksa kedua halaman hasil generate setelah aset diperbarui.
+
+Pada halaman kedua Proposal, kalimat penutup mengikuti jumlah baris judul. Posisi tanggal/tanda tangan dan tabel persetujuan tetap sesuai template. Label `(Nama dan Ttd mahasiswa)` dihapus; nama mahasiswa tetap ditampilkan.

@@ -46,7 +46,7 @@ export function verifySession(token: string): AuthClaims {
 }
 
 function publicUser(user: SessionUser): SessionUser {
-  return { id: user.id, role: user.role, username: user.username, nim: user.nim };
+  return { id: user.id, role: user.role, username: user.username, nim: user.nim, fullName: user.fullName };
 }
 
 export async function login(input: LoginInput) {

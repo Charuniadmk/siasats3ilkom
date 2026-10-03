@@ -30,4 +30,63 @@ model User {
   sessionVersion Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  submissions Submission[] @relation("StudentSubmissions")
+  reviews Submission[] @relation("SubmissionReviewer")
+}
+
+
+enum SubmissionKind {
+  PROPOSAL
+  QUALIFICATION
+}
+
+enum SubmissionStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DocumentType {
+  PROPOSAL_FORM
+  PAYMENT_RECEIPT
+  PROPOSAL_DRAFT
+  TRANSCRIPT
+  QUALIFICATION_FORM
+  PUBLISHED_ARTICLE_DRAFT
+  SIGNATURE
+}
+
+model Submission {
+  id              String @id @default(uuid()) @db.VarChar(36)
+  studentId       String @db.VarChar(36)
+  student         User @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
+  kind            SubmissionKind
+  status          SubmissionStatus @default(DRAFT)
+  formData        Json
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String? @db.VarChar(2000)
+  reviewedBy      String? @db.VarChar(36)
+  reviewer        User? @relation("SubmissionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  documents       SubmissionDocument[]
+  @@unique([studentId, kind])
+  @@index([kind, status, submittedAt])
+}
+
+model SubmissionDocument {
+  id           String @id @default(uuid()) @db.VarChar(36)
+  submissionId String @db.VarChar(36)
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  type         DocumentType
+  fileName     String @db.VarChar(255)
+  filePath     String @db.VarChar(255)
+  mimeType     String @db.VarChar(100)
+  fileSize     Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@unique([submissionId, type])
 }

@@ -11,3 +11,6 @@ playwright-report/
 *.tsbuildinfo
 *.log
 backend/src/generated/
+
+backend/uploads/
+backend/test-artifacts/

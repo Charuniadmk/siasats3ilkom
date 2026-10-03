@@ -33,3 +33,5 @@ export const updateStudentSchema = z.object({
   ...z.object(profileFields).partial().shape,
   password: accountPasswordSchema.optional(),
 }).strict();
+
+export const studentProfileUpdateSchema = z.object(profileFields).strict();

@@ -35,6 +35,7 @@ async function openMenu(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/admin/proposals?**', (route) => route.fulfill({ json: { success: true, data: [], meta: { page: 1, limit: 20, total: 0, totalPages: 0 } } }));
   await page.route('**/api/auth/me', (route) => route.fulfill({
     status: 200, json: { success: true, message: 'Sesi aktif.', data: admin },
   }));
@@ -43,21 +44,19 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
-test('Sidebar menampilkan submenu bertingkat, route aktif, dan header', async ({ page }) => {
+test('Sidebar menampilkan menu akademik tanpa submenu, route aktif, dan header', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('banner').getByRole('button', { name: 'Keluar' })).toBeVisible();
   await openMenu(page);
   const nav = page.getByRole('navigation', { name: 'Navigasi admin' });
-  await nav.getByRole('button', { name: 'Proposal', exact: true }).click();
-  await nav.getByRole('link', { name: 'LOA Conference', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'LOA Conference', exact: true })).toBeVisible();
-  await openMenu(page);
-  await nav.getByRole('link', { name: 'Kuitansi Pembayaran', exact: true }).click();
-  await expect(page).toHaveURL(/\/proposal\/loa-conference\/payment-receipt$/);
+  await nav.getByRole('link', { name: 'Proposal', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Pengajuan Proposal', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/proposals$/);
   await page.reload();
   await openMenu(page);
-  await expect(nav.getByRole('link', { name: 'Kuitansi Pembayaran', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'Proposal', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'LOA Conference', exact: true })).toHaveCount(0);
   if (await page.getByRole('button', { name: 'Tutup menu', exact: true }).isVisible()) {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Menu admin' })).not.toBeVisible();

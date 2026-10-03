@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  for (const [path, kind] of [['proposals', 'PROPOSAL'], ['qualifications', 'QUALIFICATION']]) await page.route('**/api/' + path + '/me', (route) => route.fulfill({ json: { success: true, data: { id: 'draft-' + path, kind, status: 'DRAFT', formData: {}, documents: [], student: { id: 'student-test', nim: '00123456', fullName: 'Mahasiswa Uji' } } } }));
+
   await page.route('**/api/auth/me', (route) => route.fulfill({
     status: 401, json: { success: false, message: 'Silakan masuk untuk melanjutkan.' },
   }));
@@ -61,7 +63,8 @@ for (const role of ['ADMIN', 'STUDENT'] as const) {
     await page.getByLabel(role === 'ADMIN' ? 'Username' : 'Nomor Induk Mahasiswa (NIM)', { exact: true }).fill(identifier);
     await page.getByLabel('Password', { exact: true }).fill('password-uji');
     await page.getByRole('button', { name: role === 'ADMIN' ? 'Masuk sebagai Admin' : 'Masuk sebagai Mahasiswa' }).click();
-    await expect(page.getByText(`Anda berhasil masuk sebagai ${role === 'ADMIN' ? 'Admin' : 'Mahasiswa'}.`)).toBeVisible();
+    if (role === 'ADMIN') await expect(page.getByText('Anda berhasil masuk sebagai Admin.')).toBeVisible();
+    else { await expect(page).toHaveURL(/\/dashboard$/); await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible(); }
     await page.reload();
     await expect(page.getByRole('button', { name: 'Keluar' })).toBeVisible();
     await page.getByRole('button', { name: 'Keluar' }).click();

@@ -1,9 +1,10 @@
+import { removeFile } from '../submissions/submissions.service.js';
 import { hash } from 'bcrypt';
 import type { z } from 'zod';
 import { getPrisma } from '../../config/prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { HttpError } from '../../utils/http-error.js';
-import type { createStudentSchema, studentListSchema, updateStudentSchema } from './students.schema.js';
+import type { createStudentSchema, studentListSchema, updateStudentSchema, studentProfileUpdateSchema } from './students.schema.js';
 
 const accountSelect = { id: true, nim: true, fullName: true, gender: true, address: true, birthDate: true, createdAt: true } as const;
 
@@ -68,11 +69,36 @@ export async function updateStudent(id: string, input: z.infer<typeof updateStud
 
 export async function deleteStudent(id: string) {
   try {
-    await getPrisma().user.delete({ where: { id, role: 'STUDENT' } });
+    const files = await getPrisma().$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM Submission WHERE studentId = ${id} FOR UPDATE`;
+      const documents = await tx.submissionDocument.findMany({ where: { submission: { studentId: id } }, select: { filePath: true } });
+      await tx.user.delete({ where: { id, role: 'STUDENT' } });
+      return documents;
+    }, { isolationLevel: 'ReadCommitted' });
+    await Promise.all(files.map((document) => removeFile(document.filePath)));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
       throw new HttpError(404, 'Mahasiswa tidak ditemukan.');
     }
+    throw error;
+  }
+}
+
+export async function getStudentProfile(userId: string) {
+  const profile = await getPrisma().user.findFirst({ where: { id: userId, role: 'STUDENT' }, select: accountSelect });
+  if (!profile) throw new HttpError(404, 'Profil mahasiswa tidak ditemukan.');
+  return profile;
+}
+
+export async function updateStudentProfile(userId: string, input: z.infer<typeof studentProfileUpdateSchema>) {
+  try {
+    return await getPrisma().user.update({
+      where: { id: userId, role: 'STUDENT' },
+      data: { fullName: input.fullName, gender: input.gender, address: input.address, birthDate: new Date(input.birthDate + 'T00:00:00Z') },
+      select: accountSelect,
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') throw new HttpError(404, 'Profil mahasiswa tidak ditemukan.');
     throw error;
   }
 }

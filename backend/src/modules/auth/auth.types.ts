@@ -5,6 +5,7 @@ export interface SessionUser {
   role: Role;
   username: string | null;
   nim: string | null;
+  fullName: string | null;
 }
 
 export interface AuthClaims {
