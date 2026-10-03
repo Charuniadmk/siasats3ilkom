@@ -11,8 +11,7 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = randomBytes(48).toString('hex');
 process.env.MAX_DOCUMENT_SIZE_MB = '1';
 const { completeFormSchema } = await import('../src/modules/submissions/submissions.schema.js');
-const { generateFormPdf, SIGNATURE_ZONE } =
-  await import('../src/modules/submissions/submissions.pdf.js');
+const { generateFormPdf } = await import('../src/modules/submissions/submissions.pdf.js');
 const form = {
   phone: '081234567890',
   title: 'Penelitian Sistem Akademik',
@@ -46,16 +45,22 @@ test('PDF formulir mengacu dokumen Proposal dan Kualifikasi dengan zona tanda ta
   assert.equal(completeFormSchema.safeParse({ ...form, formDate: '2026-02-30' }).success, false);
   assert.equal(completeFormSchema.safeParse({ ...form, title: '' }).success, false);
   assert.equal(completeFormSchema.safeParse({ ...form, signatureX: 0 }).success, false);
-  assert.deepEqual(SIGNATURE_ZONE, { x: 350, y: 120, width: 160, height: 70 });
   await mkdir('test-artifacts', { recursive: true });
   for (const kind of ['PROPOSAL', 'QUALIFICATION'] as const) {
     const buffer = await generateFormPdf(kind, form, student, signature);
     const pdf = await PDFDocument.load(buffer);
     assert.equal(pdf.getPageCount(), kind === 'PROPOSAL' ? 2 : 1);
     await writeFile(resolve('test-artifacts', kind + '.pdf'), buffer);
-    if (kind === 'PROPOSAL') {
+    {
       const template = await PDFDocument.load(
-        await readFile(new URL('../assets/forms/proposal-template.pdf', import.meta.url)),
+        await readFile(
+          new URL(
+            '../assets/forms/' +
+              (kind === 'PROPOSAL' ? 'proposal' : 'qualification') +
+              '-template.pdf',
+            import.meta.url,
+          ),
+        ),
       );
       for (const [index, original] of template.getPages().entries()) {
         assert.deepEqual(pdf.getPage(index).getSize(), original.getSize());
@@ -106,14 +111,36 @@ test('PDF formulir mengacu dokumen Proposal dan Kualifikasi dengan zona tanda ta
       );
       continue;
     }
-    const longBuffer = await generateFormPdf(
+    const multiline = await generateFormPdf(
       kind,
-      { ...form, title: 'Penelitian sistem informasi akademik '.repeat(27).slice(0, 1000) },
-      { ...student, address: 'Jalan Pendidikan '.repeat(55).slice(0, 1000) },
+      {
+        ...form,
+        title:
+          'Penelitian Sistem Akademik dan Pengelolaan Data Mahasiswa Doktor dengan Pendekatan Analisis Terintegrasi',
+      },
+      student,
       signature,
     );
-    assert.ok((await PDFDocument.load(longBuffer)).getPageCount() > pdf.getPageCount());
-    await writeFile(resolve('test-artifacts', kind + '-panjang.pdf'), longBuffer);
+    assert.equal((await PDFDocument.load(multiline)).getPageCount(), 1);
+    await writeFile(resolve('test-artifacts', 'QUALIFICATION-multibaris.pdf'), multiline);
+    await assert.rejects(
+      generateFormPdf(
+        kind,
+        { ...form, title: 'Judul sangat panjang '.repeat(60) },
+        student,
+        signature,
+      ),
+      /terlalu panjang/,
+    );
+    await assert.rejects(
+      generateFormPdf(
+        kind,
+        form,
+        { ...student, fullName: 'Nama ' + String.fromCodePoint(0x10ffff) },
+        signature,
+      ),
+      /karakter yang tidak didukung/,
+    );
   }
 });
 test('Proposal merapatkan bagian setelah alamat dan judul tanpa mengubah ukuran huruf', async () => {
