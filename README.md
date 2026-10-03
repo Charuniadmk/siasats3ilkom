@@ -237,14 +237,20 @@ Setelah login sebagai Admin, aplikasi membuka `/dashboard` dengan sidebar dan he
 - Kualifikasi: Isi Form Kualifikasi dan Draft Artikel yang Dipublish.
 - Dosen dan Ruangan.
 
-Untuk membuat akun mahasiswa melalui aplikasi, buka **Mahasiswa → Tambah Akun**, lalu isi NIM, password minimal 8 karakter (maksimal 72 byte), dan konfirmasi password. Akun otomatis mendapat role Mahasiswa; NIM duplikat ditolak. Setelah tersimpan, akun muncul pada daftar mahasiswa dan dapat masuk melalui pilihan Mahasiswa di halaman login. Daftar mendukung pencarian NIM dan pagination.
+Untuk membuat akun mahasiswa melalui aplikasi, buka **Mahasiswa → Tambah Akun**, lalu isi NIM, nama lengkap, jenis kelamin, alamat, tanggal lahir, dan password minimal 8 karakter (maksimal 72 byte), dan konfirmasi password. Akun otomatis mendapat role Mahasiswa; NIM duplikat ditolak. Setelah tersimpan, akun muncul pada daftar mahasiswa dan dapat masuk melalui pilihan Mahasiswa di halaman login. Daftar mendukung pencarian NIM dan pagination.
 
 | Endpoint mahasiswa | Fungsi |
 |---|---|
 | `GET /api/students?page=1&limit=20&search=` | Daftar akun mahasiswa, hanya untuk Admin |
-| `POST /api/students` | Membuat akun dengan `{ nim, password }`, hanya untuk Admin |
+| `POST /api/students` | Membuat akun dengan `{ nim, fullName, gender, address, birthDate, password }`, hanya untuk Admin |
 
-POST mahasiswa juga wajib membawa Origin yang sesuai konfigurasi. Backend menetapkan role `STUDENT` dan tidak menerima role dari input. Password maupun hash tidak disertakan pada respons daftar atau pembuatan akun. Tidak ada perubahan schema atau migrasi tambahan untuk fitur ini. Halaman Proposal, Kualifikasi, Dosen, dan Ruangan masih berupa placeholder.
+POST, PATCH, dan DELETE mahasiswa wajib membawa Origin yang sesuai konfigurasi. Backend menetapkan role `STUDENT` dan tidak menerima role dari input. Password maupun hash tidak disertakan pada respons. Halaman Proposal, Kualifikasi, Dosen, dan Ruangan masih berupa placeholder.
+
+Daftar mahasiswa menggunakan komponen reusable `DataTable` dengan konfigurasi kolom, checkbox per baris dan seluruh halaman, indikator urutan, pagination, serta keadaan memuat, gagal, dan kosong. Pilihan baris direset ketika pencarian, filter, urutan, atau halaman berubah. Checkbox hanya memilih data; penghapusan dilakukan per akun melalui dialog konfirmasi.
+
+Pencarian, filter tanggal, sorting, dan pagination diproses oleh MySQL melalui Prisma. `GET /api/students` menerima `page`, `limit` (1–100), `search` (NIM atau nama), `sortBy` (`nim`, `fullName`, atau `createdAt`), `sortOrder` (`asc` atau `desc`), serta `dateFrom`/`dateTo` (YYYY-MM-DD). Rentang tanggal bersifat inklusif berdasarkan Asia/Jakarta. Urutan bawaan adalah tanggal dibuat terbaru; ID digunakan untuk menjaga urutan stabil jika nilainya sama.
+
+`PATCH /api/students/:id` menerima `{ nim, fullName?, gender?, address?, birthDate?, password? }` untuk mengubah NIM dan password opsional. Password kosong pada form tidak dikirim. Setiap perubahan akun mencabut sesi mahasiswa. `DELETE /api/students/:id` menghapus akun setelah konfirmasi pengguna. Kedua endpoint hanya dapat diakses Admin dan hanya menargetkan akun Mahasiswa; NIM duplikat menghasilkan 409 dan akun yang tidak ditemukan menghasilkan 404. Migrasi `20261004000100_add_student_profile` menambahkan kolom profil nullable agar akun lama tetap dapat digunakan. Jalankan `npm --prefix backend run prisma:deploy` pada database lain sebelum menggunakan versi ini.
 
 ## URL pengembangan
 
@@ -305,3 +311,17 @@ npm run test:e2e
 ```
 
 Tes browser menggunakan respons API terkontrol untuk menguji login, sidebar bertingkat, header, drawer mobile, pembuatan akun, NIM duplikat, pembatasan role, dan sesi yang kedaluwarsa. Jika Chrome sudah terpasang, gunakan `$env:PLAYWRIGHT_BROWSER_CHANNEL='chrome'` sebelum menjalankan tes tanpa mengunduh Chromium.
+
+## Profil mahasiswa dan kalender
+
+Registrasi melalui aplikasi mewajibkan NIM, nama lengkap (maksimal 150 karakter), jenis kelamin, alamat (maksimal 1000 karakter), dan tanggal lahir. Jenis kelamin disimpan sebagai `MALE`/`FEMALE` dan ditampilkan sebagai Laki-laki/Perempuan. Tanggal lahir dikirim sebagai YYYY-MM-DD, divalidasi di frontend/backend, dan disimpan sebagai MySQL DATE. Tanggal yang tidak valid atau melewati hari ini di Asia/Jakarta ditolak.
+
+Komponen reusable `DatePicker` menampilkan kalender Bahasa Indonesia dengan pilihan bulan/tahun, navigasi bulan, dukungan tahun kabisat, batas tanggal, pengosongan, dan pembatalan. Profil menggunakan `StudentProfileFormFields` yang sama pada form Tambah dan Ubah. Akun lama tampil dengan nama Belum dilengkapi; Admin dapat melengkapi profil melalui Ubah. Script bootstrap terminal masih dapat membuat akun dengan profil kosong.
+
+## Komponen field reusable
+
+Semua halaman memakai `Input`, `Textarea`, `Select`, `InputDate`, `Checkbox`, dan `RadioGroup` dari `frontend/src/components/ui`. Label dan pesan validasi memakai `FormField`. Gaya dasar untuk Input, Textarea, Select, dan tanggal berasal dari `field-styles.ts`, sehingga border, radius, ukuran teks, padding, fokus, keadaan nonaktif, dan validasi konsisten. `Input` mendukung ikon awal dan konten akhir seperti tombol tampilkan password. Ref diteruskan agar tetap mendukung React Hook Form.
+
+`Select` menerima `value`, `options: { value, label, disabled? }[]`, dan `onValueChange`. Menu pilihan memakai popover agar tidak terpotong oleh tabel atau dialog, mengikuti posisi field saat halaman bergulir, serta mendukung tombol panah, Home/End, pencarian lewat keyboard, Enter, Escape, dan klik di luar. Gunakan Controller untuk integrasi Select dengan React Hook Form.
+
+`InputDate` menggunakan kalender DatePicker yang sudah tersedia, menerima tanggal YYYY-MM-DD melalui `value`/`onChange`, dan mendukung batas `min`/`max`. Tanggal lahir serta kedua filter tanggal mahasiswa memakai komponen ini; select bulan/tahun dan data per halaman juga memakai Select yang sama. Pencarian, filter, urutan, dan pagination tetap diproses backend.

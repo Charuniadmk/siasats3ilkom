@@ -10,6 +10,9 @@ process.env.NODE_ENV = 'test';
 
 const { loginSchema, accountPasswordSchema } = await import('../src/modules/auth/auth.schema.js');
 const { signSession, verifySession } = await import('../src/modules/auth/auth.service.js');
+const { createStudentSchema } = await import('../src/modules/students/students.schema.js');
+const profile = { fullName: 'Mahasiswa Uji', gender: 'FEMALE', address: 'Jalan Pendidikan 10', birthDate: '1995-02-28' };
+
 const { HttpError } = await import('../src/utils/http-error.js');
 
 test('Validasi membedakan username admin dan NIM mahasiswa, serta mempertahankan nol awal', () => {
@@ -101,18 +104,24 @@ test('Login MySQL, akses akun mahasiswa khusus Admin, sesi, origin, dan pembatas
     const studentsUrl = base.replace('/auth', '/students');
     const newNim = `${identifier}77`;
     const postStudent = (body: object, origin = new URL(env.FRONTEND_URL).origin) => fetch(studentsUrl, {
-      method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...profile, ...body }),
     });
     if (role === 'ADMIN') {
       assert.equal((await fetch(studentsUrl)).status, 401);
       assert.equal((await postStudent({ nim: newNim, password: studentPassword }, 'https://untrusted.example')).status, 403);
       assert.equal((await postStudent({ nim: newNim, password: 'pendek' })).status, 400);
+      assert.equal((await postStudent({ nim: newNim, password: studentPassword, fullName: '' })).status, 400);
+      assert.equal((await postStudent({ nim: newNim, password: studentPassword, birthDate: '2100-01-01' })).status, 400);
       assert.equal((await postStudent({ nim: newNim, password: studentPassword, role: 'ADMIN' })).status, 400);
       const created = await postStudent({ nim: newNim, password: studentPassword });
       assert.equal(created.status, 201);
       const createdBody = await created.json();
       createdIds.push(createdBody.data.id);
       assert.equal(createdBody.data.nim, newNim);
+      assert.equal(createdBody.data.fullName, profile.fullName);
+      assert.equal(createdBody.data.gender, profile.gender);
+      assert.equal(createdBody.data.address, profile.address);
+      assert.equal(createdBody.data.birthDate.slice(0, 10), profile.birthDate);
       assert.equal('passwordHash' in createdBody.data, false);
       assert.equal((await postStudent({ nim: newNim, password: studentPassword })).status, 409);
       const list = await fetch(`${studentsUrl}?search=${newNim}&limit=1&page=1`, { headers: { Cookie: cookie } });
@@ -124,6 +133,47 @@ test('Login MySQL, akses akun mahasiswa khusus Admin, sesi, origin, dan pembatas
       const newLogin = await postLogin({ role: 'STUDENT', nim: newNim, password: studentPassword });
       assert.equal(newLogin.status, 200);
       assert.equal((await newLogin.json()).data.role, 'STUDENT');
+      const studentCookie = newLogin.headers.get('set-cookie')!.split(';')[0];
+      const accountUrl = `${studentsUrl}/${createdBody.data.id}`;
+      const modify = (method: string, data?: object, session = cookie, origin = new URL(env.FRONTEND_URL).origin) => fetch(accountUrl, {
+        method, headers: { Cookie: session, Origin: origin, 'Content-Type': 'application/json' },
+        ...(data && { body: JSON.stringify(data) }),
+      });
+      assert.equal((await modify('PATCH', { nim: newNim }, studentCookie)).status, 403);
+      assert.equal((await modify('DELETE', undefined, studentCookie)).status, 403);
+      assert.equal((await modify('PATCH', { nim: newNim }, cookie, 'https://untrusted.example')).status, 403);
+      assert.equal((await modify('DELETE', undefined, cookie, 'https://untrusted.example')).status, 403);
+      assert.equal((await modify('PATCH', { nim: identifier })).status, 409);
+      assert.equal((await modify('PATCH', { nim: newNim, role: 'ADMIN' })).status, 400);
+      assert.equal((await modify('PATCH', { nim: newNim, birthDate: '1995-02-30' })).status, 400);
+      const renamedNim = `${newNim}1`;
+      const updated = await modify('PATCH', { nim: renamedNim, fullName: 'Nama Mahasiswa Baru', gender: 'MALE', address: 'Alamat baru', birthDate: '1990-01-01' });
+      assert.equal(updated.status, 200);
+      assert.equal('passwordHash' in (await updated.json()).data, false);
+      assert.equal((await fetch(`${base}/me`, { headers: { Cookie: studentCookie } })).status, 401);
+      assert.equal((await postLogin({ role: 'STUDENT', nim: renamedNim, password: studentPassword })).status, 200);
+      const profileSearch = await fetch(`${studentsUrl}?search=Nama%20Mahasiswa%20Baru&sortBy=fullName`, { headers: { Cookie: cookie } });
+      const profileSearchBody = await profileSearch.json();
+      assert.ok(profileSearchBody.data.some((row: { id: string; birthDate: string }) => row.id === createdBody.data.id && row.birthDate.slice(0, 10) === '1990-01-01'));
+      const changedPassword = randomBytes(24).toString('hex');
+      assert.equal((await modify('PATCH', { nim: renamedNim, password: changedPassword })).status, 200);
+      assert.equal((await postLogin({ role: 'STUDENT', nim: renamedNim, password: changedPassword })).status, 200);
+      assert.equal((await fetch(`${studentsUrl}/${createdIds[0]}`, { method: 'DELETE', headers: { Cookie: cookie, Origin: new URL(env.FRONTEND_URL).origin } })).status, 404);
+      for (const sortOrder of ['asc', 'desc']) {
+        const sorted = await fetch(`${studentsUrl}?search=${identifier}&sortBy=nim&sortOrder=${sortOrder}&limit=100&dateFrom=2000-01-01&dateTo=2099-12-31`, { headers: { Cookie: cookie } });
+        assert.equal(sorted.status, 200);
+        const rows = (await sorted.json()).data as { nim: string }[];
+        const nims = rows.map((row) => row.nim);
+        const expected = [...nims].sort();
+        assert.deepEqual(nims, sortOrder === 'asc' ? expected : expected.reverse());
+      }
+      const excluded = await fetch(`${studentsUrl}?search=${renamedNim}&dateTo=2000-01-01`, { headers: { Cookie: cookie } });
+      assert.equal((await excluded.json()).meta.total, 0);
+      for (const query of ['sortBy=passwordHash', 'sortOrder=invalid', 'dateFrom=2026-10-05&dateTo=2026-10-01']) {
+        assert.equal((await fetch(`${studentsUrl}?${query}`, { headers: { Cookie: cookie } })).status, 400);
+      }
+      assert.equal((await modify('DELETE')).status, 200);
+      assert.equal((await modify('DELETE')).status, 404);
     } else {
       assert.equal((await fetch(studentsUrl, { headers: { Cookie: cookie } })).status, 403);
       assert.equal((await postStudent({ nim: `${newNim}2`, password: studentPassword })).status, 403);
@@ -147,4 +197,18 @@ test('Login MySQL, akses akun mahasiswa khusus Admin, sesi, origin, dan pembatas
   assert.ok(limited, 'Percobaan login harus dibatasi.');
   assert.equal((await limited.json()).message, 'Terlalu banyak percobaan masuk. Silakan coba lagi dalam 15 menit.');
   assert.ok(limited.headers.get('retry-after'));
+});
+
+test('Profil registrasi wajib lengkap dan tanggal lahir harus valid', () => {
+  const valid = { ...profile, nim: '001122', password: 'password-uji' };
+  assert.equal(createStudentSchema.safeParse(valid).success, true);
+  for (const field of ['fullName', 'gender', 'address', 'birthDate']) {
+    assert.equal(createStudentSchema.safeParse({ ...valid, [field]: undefined }).success, false);
+  }
+  for (const birthDate of ['1995-02-30', '2100-01-01', '1899-12-31', '']) {
+    assert.equal(createStudentSchema.safeParse({ ...valid, birthDate }).success, false);
+  }
+  assert.equal(createStudentSchema.safeParse({ ...valid, fullName: '   ' }).success, false);
+  assert.equal(createStudentSchema.safeParse({ ...valid, address: '   ' }).success, false);
+  assert.equal(createStudentSchema.safeParse({ ...valid, gender: 'INVALID' }).success, false);
 });

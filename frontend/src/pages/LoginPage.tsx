@@ -6,12 +6,13 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { ArrowRight, Eye, EyeOff, GraduationCap, IdCard, LoaderCircle, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import RadioGroup from '../components/ui/RadioGroup';
 import FormField from '../components/forms/FormField';
 import { authErrorMessage, login } from '../features/auth/auth-api';
 import { sessionQueryKey, useAuth } from '../features/auth/use-auth';
 import type { Role } from '../features/auth/types';
 
-const inputClass = 'w-full rounded-lg border border-border bg-white py-3 pl-11 pr-4 text-sm text-primary placeholder:text-slate-400 transition-colors focus:border-accent disabled:bg-surface';
 
 function formSchema(role: Role) {
   return z.object({
@@ -106,26 +107,15 @@ export default function LoginPage() {
           <h2 className="text-3xl font-semibold tracking-tight">Masuk ke akun Anda</h2>
           <p className="mt-3 text-sm leading-6 text-secondary">Pilih jenis akun dan masukkan data Anda.</p>
 
-          <fieldset className="mt-8" disabled={mutation.isPending}>
-            <legend className="sr-only">Jenis akun</legend>
-            <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1">
-              {([{ value: 'STUDENT', label: 'Mahasiswa', Icon: GraduationCap }, { value: 'ADMIN', label: 'Admin', Icon: ShieldCheck }] as const).map(({ value, label, Icon }) => (
-                <label key={value} className={`relative flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors has-focus-visible:outline-2 has-focus-visible:outline-accent ${role === value ? 'bg-white text-accent shadow-sm' : 'text-secondary hover:text-primary'}`}>
-                  <input className="absolute inset-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed" type="radio" name="account-role" value={value} checked={role === value} onChange={() => switchRole(value)} />
-                  <Icon size={17} aria-hidden="true" />{label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <div className="mt-8"><RadioGroup name="account-role" label="Jenis akun" value={role} onValueChange={switchRole} disabled={mutation.isPending} options={[{ value: 'STUDENT', label: 'Mahasiswa', icon: <GraduationCap size={17} aria-hidden="true" /> }, { value: 'ADMIN', label: 'Admin', icon: <ShieldCheck size={17} aria-hidden="true" /> }]} /></div>
 
           <form className="mt-7 space-y-5" onSubmit={(event) => { void submit(event); }} noValidate>
             <FormField id="identifier" label={isAdmin ? 'Username' : 'Nomor Induk Mahasiswa (NIM)'} error={form.formState.errors.identifier?.message}>
-              <div className="relative">
-                <IdentifierIcon className="pointer-events-none absolute top-3.5 left-3.5 text-secondary" size={18} aria-hidden="true" />
-                <input
+
+                <Input
                   {...form.register('identifier')}
                   id="identifier"
-                  className={inputClass}
+                  leadingIcon={<IdentifierIcon size={18} />}
                   type="text"
                   inputMode={isAdmin ? 'text' : 'numeric'}
                   autoComplete="username"
@@ -136,27 +126,24 @@ export default function LoginPage() {
                   aria-invalid={Boolean(form.formState.errors.identifier)}
                   aria-describedby={form.formState.errors.identifier ? 'identifier-error' : undefined}
                 />
-              </div>
             </FormField>
 
             <FormField id="password" label="Password" error={form.formState.errors.password?.message}>
-              <div className="relative">
-                <LockKeyhole className="pointer-events-none absolute top-3.5 left-3.5 text-secondary" size={18} aria-hidden="true" />
-                <input
+
+                <Input
                   {...form.register('password')}
                   id="password"
-                  className={`${inputClass} pr-12`}
+                  leadingIcon={<LockKeyhole size={18} />}
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   placeholder="Masukkan password Anda"
                   disabled={mutation.isPending}
                   aria-invalid={Boolean(form.formState.errors.password)}
                   aria-describedby={form.formState.errors.password ? 'password-error' : undefined}
-                />
-                <button type="button" className="absolute top-1 right-1 flex size-10 items-center justify-center rounded-md text-secondary hover:text-primary" aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>
+                  trailingContent={<button type="button" className="flex size-10 items-center justify-center rounded-md text-secondary hover:text-primary" aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
-                </button>
-              </div>
+                </button>}
+                />
             </FormField>
 
             {mutation.isError && <p role="alert" className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-error">{authErrorMessage(mutation.error)}</p>}

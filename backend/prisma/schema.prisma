@@ -12,11 +12,20 @@ enum Role {
   STUDENT
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 model User {
   id             String   @id @default(uuid()) @db.VarChar(36)
   role           Role
   username       String?  @unique @db.VarChar(64)
   nim            String?  @unique @db.VarChar(32)
+  fullName       String?  @db.VarChar(150)
+  gender         Gender?
+  address        String?  @db.VarChar(1000)
+  birthDate      DateTime? @db.Date
   passwordHash   String   @db.VarChar(60)
   sessionVersion Int      @default(0)
   createdAt      DateTime @default(now())

@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../../middleware/authenticate.js';
 import { trustedOrigin } from '../../middleware/trusted-origin.js';
 import { HttpError } from '../../utils/http-error.js';
-import { createStudentSchema, studentListSchema } from './students.schema.js';
-import { createStudent, listStudents } from './students.service.js';
+import { createStudentSchema, studentListSchema, studentIdSchema, updateStudentSchema } from './students.schema.js';
+import { createStudent, listStudents, updateStudent, deleteStudent } from './students.service.js';
 
 export const studentsRouter = Router();
 studentsRouter.use(authenticate, authorize('ADMIN'));
@@ -14,6 +14,22 @@ studentsRouter.get('/', async (req, res) => {
   if (!input.success) throw new HttpError(400, 'Parameter pencarian mahasiswa tidak valid.');
   const result = await listStudents(input.data);
   res.json({ success: true, ...result });
+});
+
+studentsRouter.patch('/:id', trustedOrigin, async (req, res) => {
+  const id = studentIdSchema.safeParse(req.params.id);
+  if (!id.success) throw new HttpError(400, 'ID mahasiswa tidak valid.');
+  const input = updateStudentSchema.safeParse(req.body);
+  if (!input.success) throw new HttpError(400, input.error.issues[0]?.path.length ? input.error.issues[0].message : 'Periksa kembali data akun mahasiswa.');
+  const data = await updateStudent(id.data, input.data);
+  res.json({ success: true, message: 'Akun mahasiswa berhasil diperbarui.', data });
+});
+
+studentsRouter.delete('/:id', trustedOrigin, async (req, res) => {
+  const id = studentIdSchema.safeParse(req.params.id);
+  if (!id.success) throw new HttpError(400, 'ID mahasiswa tidak valid.');
+  await deleteStudent(id.data);
+  res.json({ success: true, message: 'Akun mahasiswa berhasil dihapus.' });
 });
 
 studentsRouter.post('/', trustedOrigin, async (req, res) => {
