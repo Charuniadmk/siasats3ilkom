@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import PageHeader from '../../components/common/PageHeader';
 import PdfPreview from '../../components/common/PdfPreview';
 import FormField from '../../components/forms/FormField';
 import Input from '../../components/ui/Input';
 import Textarea from '../../components/ui/Textarea';
-import InputDate from '../../components/ui/InputDate';
 import Button from '../../components/ui/Button';
 import SubmissionBadge from '../../components/ui/SubmissionBadge';
 import { authErrorMessage } from '../auth/auth-api';
@@ -30,7 +29,6 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
   const client = useQueryClient();
   const key = ['submission', kind];
   const form = useForm<AcademicForm>({ defaultValues: initial.formData });
-  const formDate = useWatch({ control: form.control, name: 'formDate' });
   const [preview, setPreview] = useState<SubmissionDocument | null>(null);
   const [notice, setNotice] = useState('');
   const [fileError, setFileError] = useState('');
@@ -99,7 +97,6 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
     { key: 'promoter', label: 'Promotor', max: 150 },
     { key: 'coPromoter1', label: 'Co-Promotor 1', max: 150 },
     { key: 'coPromoter2', label: 'Co-Promotor 2 (opsional)', max: 150 },
-    { key: 'city', label: 'Kota', max: 100 },
   ];
   return (
     <div className="space-y-6">
@@ -161,7 +158,7 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
           <Link to="/profile" className="text-accent">
             Profil mahasiswa
           </Link>
-          . Lengkapi data sebelum membuat PDF.
+          . Lengkapi data sebelum membuat PDF. Kota otomatis Salatiga dan tanggal mengikuti waktu pembuatan PDF (WIB).
         </p>
         <form
           onSubmit={(e) => {
@@ -210,14 +207,6 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
                   />
                 </FormField>
               ))}
-              <FormField id="academic-date" label="Tanggal Formulir">
-                <InputDate
-                  id="academic-date"
-                  value={formDate}
-                  onChange={(value) => form.setValue('formDate', value, { shouldDirty: true })}
-                  disabled={locked || busy}
-                />
-              </FormField>
             </div>
             <FormField
               id="academic-title"

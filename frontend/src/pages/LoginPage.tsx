@@ -87,7 +87,7 @@ export default function LoginPage() {
             Perjalanan akademik,<br /><span className="text-accent">dalam satu ruang.</span>
           </h1>
           <p className="mt-6 max-w-sm text-base leading-7 text-secondary">
-            Sistem Manajemen Mahasiswa Doktor. Akses akun Anda untuk melanjutkan perjalanan akademik.
+            Sistem Akademik Mahasiswa Doktor. Akses akun Anda untuk melanjutkan perjalanan akademik.
           </p>
           <div aria-hidden="true" className="relative mt-12 h-40 max-w-sm">
             <div className="absolute inset-x-4 top-5 h-28 rounded-2xl border border-blue-100 bg-white/60 rotate-[-6deg]" />
@@ -99,7 +99,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="relative z-10 hidden text-xs text-secondary lg:block">Sistem Manajemen Mahasiswa Doktor</p>
+        <p className="relative z-10 hidden text-xs text-secondary lg:block">Sistem Akademik Mahasiswa Doktor</p>
         <div aria-hidden="true" className="pointer-events-none absolute -right-48 -bottom-48 hidden size-[32rem] rounded-full border border-blue-100 lg:block" />
         <div aria-hidden="true" className="pointer-events-none absolute -right-32 -bottom-32 hidden size-96 rounded-full border border-blue-100 lg:block" />
       </section>

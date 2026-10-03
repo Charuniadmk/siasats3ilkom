@@ -11,7 +11,7 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = randomBytes(48).toString('hex');
 process.env.MAX_DOCUMENT_SIZE_MB = '1';
 const { completeFormSchema } = await import('../src/modules/submissions/submissions.schema.js');
-const { generateFormPdf } = await import('../src/modules/submissions/submissions.pdf.js');
+const { generateFormPdf, withGenerationMetadata } = await import('../src/modules/submissions/submissions.pdf.js');
 const form = {
   phone: '081234567890',
   title: 'Penelitian Sistem Akademik',
@@ -40,6 +40,10 @@ const signature = await sharp({
   ])
   .png()
   .toBuffer();
+test('Tanggal formulir otomatis mengikuti WIB dan kota selalu Salatiga', () => {
+  assert.deepEqual(withGenerationMetadata({ ...form, city: 'Jakarta', formDate: '2000-01-01' }, new Date('2026-10-04T17:30:00Z')), { ...form, city: 'Salatiga', formDate: '2026-10-05' });
+  assert.equal(completeFormSchema.safeParse({ ...form, city: '', formDate: '' }).success, true);
+});
 test('PDF formulir mengacu dokumen Proposal dan Kualifikasi dengan zona tanda tangan tetap', async () => {
   assert.equal(completeFormSchema.safeParse(form).success, true);
   assert.equal(completeFormSchema.safeParse({ ...form, formDate: '2026-02-30' }).success, false);

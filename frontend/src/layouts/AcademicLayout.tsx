@@ -34,7 +34,7 @@ export default function AcademicLayout({ role }: { role: 'ADMIN' | 'STUDENT' }) 
       <div className="min-w-0 lg:ml-64">
         <Header role={role} onOpenMenu={() => setMenuOpen(true)} />
         <main id="main-content" className="mx-auto w-full max-w-7xl p-5 sm:p-8 lg:p-10"><Outlet /></main>
-        <footer className="px-5 pb-6 text-xs text-secondary sm:px-8 lg:px-10">Sistem Manajemen Mahasiswa Doktor</footer>
+        <footer className="px-5 pb-6 text-xs text-secondary sm:px-8 lg:px-10">Sistem Akademik Mahasiswa Doktor</footer>
       </div>
     </div>
   );

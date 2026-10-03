@@ -108,6 +108,8 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
       await route.fulfill({ json: { success: true, data: current } });
     });
     await page.goto(routePath);
+    await expect(page.locator('#academic-city')).toHaveCount(0);
+    await expect(page.locator('#academic-date')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Kirim Pengajuan', exact: true })).toBeDisabled();
     await expect(page.getByLabel('NIM', { exact: true })).toHaveAttribute('readonly', '');
     const firstUpload =
@@ -263,13 +265,10 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
     await page.getByRole('link', { name: 'Lihat Detail', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Data Mahasiswa', exact: true })).toBeVisible();
     await expect(page.getByText('Persetujuan.pdf', { exact: true })).toBeVisible();
-    for (const index of [0, 1]) {
-      await page.getByRole('button', { name: 'Pratinjau PDF', exact: true }).nth(index).click();
-      await expect(page.locator('iframe')).toHaveAttribute('src', /^blob:/);
-      await page.getByRole('button', { name: 'Tutup Pratinjau', exact: true }).click();
-    }
-    await page.getByRole('button', { name: 'Pratinjau Tanda Tangan', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Pratinjau Tanda Tangan' })).toBeVisible();
+    await expect(page.getByText('Formulir.pdf', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('signature.png', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Pratinjau Tanda Tangan', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Pratinjau PDF', exact: true }).click();
     await expect(page.locator('iframe')).toHaveAttribute('src', /^blob:/);
     await page.getByRole('button', { name: 'Tutup Pratinjau', exact: true }).click();
     await page.getByRole('button', { name: 'Tolak', exact: true }).click();

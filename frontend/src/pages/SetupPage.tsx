@@ -22,7 +22,7 @@ export default function SetupPage() {
       <section className="w-full max-w-xl rounded-xl border border-border bg-background p-8 shadow-sm">
         <CheckCircle2 className="mb-6 text-success" size={28} aria-hidden="true" />
         <h1 className="text-2xl font-semibold tracking-tight text-primary">
-          Sistem Manajemen Mahasiswa Doktor
+          Sistem Akademik Mahasiswa Doktor
         </h1>
         <p className="mt-3 text-base text-secondary">Anda berhasil masuk sebagai {session.data?.role === 'ADMIN' ? 'Admin' : 'Mahasiswa'}.</p>
         <p className="mt-2 text-sm text-secondary">Akun: {session.data?.username ?? session.data?.nim}</p>

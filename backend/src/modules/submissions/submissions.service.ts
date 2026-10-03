@@ -9,7 +9,7 @@ import { getPrisma } from '../../config/prisma.js';
 import type { Prisma, SubmissionKind, DocumentType } from '../../generated/prisma/client.js';
 import { HttpError } from '../../utils/http-error.js';
 import { completeFormSchema, formSchema, type AcademicForm } from './submissions.schema.js';
-import { generateFormPdf } from './submissions.pdf.js';
+import { generateFormPdf, withGenerationMetadata } from './submissions.pdf.js';
 
 export const uploadRoot = resolve(
   fileURLToPath(new URL('../../../', import.meta.url)),
@@ -115,12 +115,14 @@ export async function saveDraft(studentId: string, kind: SubmissionKind, form: A
   const result = await getPrisma().$transaction(
     async (tx) => {
       const submission = await lock(tx, studentId, kind);
-      if (JSON.stringify(formSchema.parse(submission.formData)) !== JSON.stringify(form)) {
+      const previous = formSchema.parse(submission.formData);
+      const savedForm = { ...form, city: 'Salatiga', formDate: previous.formDate };
+      if (JSON.stringify({ ...previous, city: 'Salatiga' }) !== JSON.stringify(savedForm)) {
         await invalidateForms(tx, submission, kind, obsolete);
       }
       return tx.submission.update({
         where: { id: submission.id },
-        data: { formData: form },
+        data: { formData: savedForm },
         include,
       });
     },
@@ -249,13 +251,16 @@ export async function generatePdf(studentId: string, kind: SubmissionKind) {
         const signature = submission.documents.find((d) => d.type === 'SIGNATURE');
         if (!signature)
           throw new HttpError(400, 'Unggah PNG tanda tangan transparan sebelum membuat PDF.');
+        const generatedAt = new Date();
+        const generatedForm = withGenerationMetadata(parsed.data, generatedAt);
         let buffer: Buffer;
         try {
           buffer = await generateFormPdf(
             kind,
-            parsed.data,
+            generatedForm,
             submission.student,
             await readFile(resolve(uploadRoot, signature.filePath)),
+            generatedAt,
           );
         } catch (error) {
           if (error instanceof HttpError) throw error;
@@ -280,7 +285,11 @@ export async function generatePdf(studentId: string, kind: SubmissionKind) {
           create: { submissionId: submission.id, type, ...metadata },
           update: metadata,
         });
-        return tx.submission.findUniqueOrThrow({ where: { id: submission.id }, include });
+        return tx.submission.update({
+          where: { id: submission.id },
+          data: { formData: generatedForm },
+          include,
+        });
       },
       { timeout: 15000, isolationLevel: 'ReadCommitted' },
     );

@@ -31,8 +31,8 @@ export const formSchema = z
 export type AcademicForm = z.infer<typeof formSchema>;
 export const completeFormSchema = formSchema.refine(
   (v) =>
-    [v.phone, v.title, v.promoter, v.coPromoter1, v.program, v.city, v.formDate].every(Boolean),
-  'Lengkapi nomor telepon, judul, pembimbing, program studi, kota, dan tanggal formulir.',
+    [v.phone, v.title, v.promoter, v.coPromoter1, v.program].every(Boolean),
+  'Lengkapi nomor telepon, judul, pembimbing, dan program studi.',
 );
 export const reviewSchema = z.discriminatedUnion(
   'decision',

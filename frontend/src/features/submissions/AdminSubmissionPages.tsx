@@ -303,7 +303,7 @@ export function AdminSubmissionDetail({ kind }: { kind: SubmissionKind }) {
                   label:
                     document.type === 'SIGNATURE' ? 'Tanda Tangan Mahasiswa' : 'Dokumen Tambahan',
                 })),
-            ].map(({ type, label }) => {
+            ].filter(({ type }) => !['PROPOSAL_FORM', 'QUALIFICATION_FORM', 'SIGNATURE'].includes(type)).map(({ type, label }) => {
               const document = submission.documents.find((d) => d.type === type);
               return (
                 <div key={type} className="rounded-xl border border-border p-5">

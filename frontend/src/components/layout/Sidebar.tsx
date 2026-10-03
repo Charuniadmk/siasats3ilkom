@@ -1,6 +1,7 @@
 import { useState } from "react";
+import logo from "../../assets/logo.png";
 import { NavLink, useLocation } from "react-router-dom";
-import { ChevronDown, GraduationCap, ShieldCheck, X } from "lucide-react";
+import { ChevronDown, ShieldCheck, X } from "lucide-react";
 import {
   flattenNavigation,
   navigation,
@@ -109,9 +110,7 @@ export default function Sidebar({
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="flex h-20 shrink-0 items-center gap-3 border-b border-border px-6">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
-          <GraduationCap size={23} aria-hidden="true" />
-        </span>
+        <img src={logo} alt="Logo Universitas Kristen Satya Wacana" className="size-10 shrink-0 object-contain" />
         <div>
           <p className="text-sm font-semibold">Sistem Akademik</p>
           <p className="mt-0.5 text-xs text-secondary">Program Doktor</p>
