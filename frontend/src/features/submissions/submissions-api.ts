@@ -52,12 +52,17 @@ export const requiredDocuments = (kind: SubmissionKind) =>
   kind === 'PROPOSAL'
     ? [
         { type: 'PROPOSAL_FORM', label: 'Formulir Proposal' },
+        { type: 'SIGNED_PROPOSAL_FORM', label: 'Formulir Proposal Bertanda Tangan Persetujuan' },
         { type: 'PAYMENT_RECEIPT', label: 'Kuitansi Pembayaran' },
         { type: 'PROPOSAL_DRAFT', label: 'Draft Proposal' },
         { type: 'TRANSCRIPT', label: 'Transkrip Nilai' },
       ]
     : [
         { type: 'QUALIFICATION_FORM', label: 'Form Kualifikasi' },
+        {
+          type: 'SIGNED_QUALIFICATION_FORM',
+          label: 'Form Kualifikasi Bertanda Tangan Persetujuan',
+        },
         { type: 'PUBLISHED_ARTICLE_DRAFT', label: 'Draft Artikel yang Dipublikasikan' },
       ];
 export async function getSubmission(kind: SubmissionKind, id?: string) {

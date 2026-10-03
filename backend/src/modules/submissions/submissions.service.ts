@@ -16,11 +16,44 @@ export const uploadRoot = resolve(
   env.UPLOAD_DIR,
 );
 export const requirements: Record<SubmissionKind, DocumentType[]> = {
-  PROPOSAL: ['PROPOSAL_FORM', 'PAYMENT_RECEIPT', 'PROPOSAL_DRAFT', 'TRANSCRIPT'],
-  QUALIFICATION: ['QUALIFICATION_FORM', 'PUBLISHED_ARTICLE_DRAFT'],
+  PROPOSAL: [
+    'PROPOSAL_FORM',
+    'SIGNED_PROPOSAL_FORM',
+    'PAYMENT_RECEIPT',
+    'PROPOSAL_DRAFT',
+    'TRANSCRIPT',
+  ],
+  QUALIFICATION: ['QUALIFICATION_FORM', 'SIGNED_QUALIFICATION_FORM', 'PUBLISHED_ARTICLE_DRAFT'],
 };
 export const formType = (kind: SubmissionKind): DocumentType =>
   kind === 'PROPOSAL' ? 'PROPOSAL_FORM' : 'QUALIFICATION_FORM';
+export const signedFormType = (kind: SubmissionKind): DocumentType =>
+  kind === 'PROPOSAL' ? 'SIGNED_PROPOSAL_FORM' : 'SIGNED_QUALIFICATION_FORM';
+const documentLabels: Record<DocumentType, string> = {
+  PROPOSAL_FORM: 'Formulir Proposal hasil generate',
+  SIGNED_PROPOSAL_FORM: 'Formulir Proposal Bertanda Tangan Persetujuan',
+  QUALIFICATION_FORM: 'Form Kualifikasi hasil generate',
+  SIGNED_QUALIFICATION_FORM: 'Form Kualifikasi Bertanda Tangan Persetujuan',
+  PAYMENT_RECEIPT: 'Kuitansi Pembayaran',
+  PROPOSAL_DRAFT: 'Draft Proposal',
+  TRANSCRIPT: 'Transkrip Nilai',
+  PUBLISHED_ARTICLE_DRAFT: 'Draft Artikel yang Dipublikasikan',
+  SIGNATURE: 'Tanda Tangan Mahasiswa',
+};
+async function invalidateForms(
+  tx: Prisma.TransactionClient,
+  submission: { documents: { id: string; type: DocumentType; filePath: string }[] },
+  kind: SubmissionKind,
+  obsolete: string[],
+  includeGenerated = true,
+) {
+  const types = includeGenerated ? [formType(kind), signedFormType(kind)] : [signedFormType(kind)];
+  const old = submission.documents.filter((d) => types.includes(d.type));
+  if (old.length) {
+    await tx.submissionDocument.deleteMany({ where: { id: { in: old.map((d) => d.id) } } });
+    obsolete.push(...old.map((d) => d.filePath));
+  }
+}
 const include = {
   documents: true,
   student: { select: { id: true, nim: true, fullName: true, gender: true, address: true } },
@@ -83,11 +116,7 @@ export async function saveDraft(studentId: string, kind: SubmissionKind, form: A
     async (tx) => {
       const submission = await lock(tx, studentId, kind);
       if (JSON.stringify(formSchema.parse(submission.formData)) !== JSON.stringify(form)) {
-        const old = submission.documents.find((d) => d.type === formType(kind));
-        if (old) {
-          await tx.submissionDocument.delete({ where: { id: old.id } });
-          obsolete.push(old.filePath);
-        }
+        await invalidateForms(tx, submission, kind, obsolete);
       }
       return tx.submission.update({
         where: { id: submission.id },
@@ -163,14 +192,18 @@ export async function uploadDocument(
     const result = await getPrisma().$transaction(
       async (tx) => {
         const submission = await lock(tx, studentId, kind);
+        if (
+          type === signedFormType(kind) &&
+          !submission.documents.some((d) => d.type === formType(kind))
+        )
+          throw new HttpError(
+            400,
+            'Buat dan unduh PDF formulir terlebih dahulu sebelum mengunggah formulir bertanda tangan persetujuan.',
+          );
         const old = submission.documents.find((d) => d.type === type);
         if (old) obsolete.push(old.filePath);
         if (type === 'SIGNATURE') {
-          const form = submission.documents.find((d) => d.type === formType(kind));
-          if (form) {
-            await tx.submissionDocument.delete({ where: { id: form.id } });
-            obsolete.push(form.filePath);
-          }
+          await invalidateForms(tx, submission, kind, obsolete);
         }
         await writeFile(resolve(uploadRoot, path), buffer, { flag: 'wx' });
         const metadata = {
@@ -232,6 +265,7 @@ export async function generatePdf(studentId: string, kind: SubmissionKind) {
           );
         }
         await writeFile(resolve(uploadRoot, path), buffer, { flag: 'wx' });
+        await invalidateForms(tx, submission, kind, obsolete, false);
         const type = formType(kind);
         const old = submission.documents.find((d) => d.type === type);
         if (old) obsolete.push(old.filePath);
@@ -264,6 +298,17 @@ export async function submit(studentId: string, kind: SubmissionKind) {
         const submission = await lock(tx, studentId, kind);
         if (!completeFormSchema.safeParse(submission.formData).success)
           throw new HttpError(400, 'Data formulir belum lengkap.');
+        const missing = requirements[kind].filter(
+          (type) =>
+            !submission.documents.some((d) => d.type === type && d.mimeType === 'application/pdf'),
+        );
+        if (missing.length)
+          throw new HttpError(
+            400,
+            'Dokumen yang belum lengkap: ' +
+              missing.map((type) => documentLabels[type]).join(', ') +
+              '.',
+          );
         for (const type of requirements[kind]) {
           const document = submission.documents.find((d) => d.type === type);
           if (!document || document.mimeType !== 'application/pdf')
@@ -276,7 +321,7 @@ export async function submit(studentId: string, kind: SubmissionKind) {
           } catch {
             throw new HttpError(
               400,
-              'Dokumen PDF tidak tersedia atau tidak valid. Unggah kembali dokumen.',
+              `${documentLabels[type]} tidak tersedia atau tidak valid. Unggah kembali dokumen tersebut.`,
             );
           }
         }

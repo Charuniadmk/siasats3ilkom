@@ -281,13 +281,29 @@ export function AdminSubmissionDetail({ kind }: { kind: SubmissionKind }) {
         </section>
         <section className="rounded-2xl border border-border bg-white p-6">
           <h2 className="text-lg font-semibold">Dokumen Pengajuan</h2>
+          <p className="mt-2 text-sm text-secondary">
+            Periksa semua lampiran dan pastikan formulir persetujuan telah ditandatangani oleh
+            penyetuju.
+          </p>
           {downloadError && (
             <p role="alert" className="mt-3 text-error">
               {downloadError}
             </p>
           )}
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            {requiredDocuments(kind).map(({ type, label }) => {
+            {[
+              ...requiredDocuments(kind),
+              ...submission.documents
+                .filter(
+                  (document) =>
+                    !requiredDocuments(kind).some((required) => required.type === document.type),
+                )
+                .map((document) => ({
+                  type: document.type,
+                  label:
+                    document.type === 'SIGNATURE' ? 'Tanda Tangan Mahasiswa' : 'Dokumen Tambahan',
+                })),
+            ].map(({ type, label }) => {
               const document = submission.documents.find((d) => d.type === type);
               return (
                 <div key={type} className="rounded-xl border border-border p-5">
@@ -298,7 +314,9 @@ export function AdminSubmissionDetail({ kind }: { kind: SubmissionKind }) {
                   {document && (
                     <div className="mt-4 flex gap-4">
                       <button className="text-sm text-accent" onClick={() => setPreview(document)}>
-                        Pratinjau PDF
+                        {document.mimeType === 'application/pdf'
+                          ? 'Pratinjau PDF'
+                          : 'Pratinjau Tanda Tangan'}
                       </button>
                       <button
                         className="text-sm text-accent"
@@ -308,7 +326,9 @@ export function AdminSubmissionDetail({ kind }: { kind: SubmissionKind }) {
                           );
                         }}
                       >
-                        Unduh PDF
+                        {document.mimeType === 'application/pdf'
+                          ? 'Unduh PDF'
+                          : 'Unduh Tanda Tangan'}
                       </button>
                     </div>
                   )}

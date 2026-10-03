@@ -68,8 +68,12 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
   });
   useSessionExpiry(mutation.error);
   const busy = mutation.isPending;
-  const complete = requiredDocuments(kind).every((d) =>
-    initial.documents.some((file) => file.type === d.type),
+  const missingDocuments = requiredDocuments(kind).filter(
+    (d) => !initial.documents.some((file) => file.type === d.type),
+  );
+  const complete = missingDocuments.length === 0;
+  const generatedForm = initial.documents.find(
+    (d) => d.type === (kind === 'PROPOSAL' ? 'PROPOSAL_FORM' : 'QUALIFICATION_FORM'),
   );
   const upload = (file: File | undefined, type: string) => {
     if (!file) return;
@@ -118,7 +122,7 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
       )}
       {locked && (
         <p className="rounded-xl border border-border bg-white p-4 text-sm text-secondary">
-          Pengajuan hanya dapat dilihat. Anda tetap dapat melihat dan mengunduh setiap dokumen PDF.
+          Pengajuan proposal anda sedang ditinjau oleh admin. Pengajuan hanya dapat dilihat. Anda tetap dapat melihat dan mengunduh setiap dokumen PDF.
         </p>
       )}
       {notice && (
@@ -131,6 +135,21 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
           {fileError || authErrorMessage(mutation.error)}
         </p>
       )}
+      <section className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+        <h2 className="font-semibold">Alur Persetujuan Formulir</h2>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
+          <li>Lengkapi data dan buat PDF formulir.</li>
+          <li>
+            Unduh PDF, lalu minta tanda tangan penyetuju. Formulir dapat dicetak dan dipindai
+            kembali atau ditandatangani secara digital.
+          </li>
+          <li>
+            Unggah kembali PDF pada kolom formulir bertanda tangan persetujuan, lalu lengkapi semua
+            lampiran.
+          </li>
+          <li>Kirim pengajuan setelah seluruh dokumen lengkap untuk diperiksa Admin.</li>
+        </ol>
+      </section>
       <section className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
         <h2 className="text-lg font-semibold">
           {kind === 'PROPOSAL'
@@ -269,7 +288,8 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {requiredDocuments(kind).map(({ type, label }) => {
             const document = initial.documents.find((d) => d.type === type);
-            const isForm = type.endsWith('_FORM');
+            const isSignedForm = type.startsWith('SIGNED_');
+            const isForm = type === 'PROPOSAL_FORM' || type === 'QUALIFICATION_FORM';
             return (
               <div key={type} className="rounded-xl border border-border p-5">
                 <h3 className="text-sm font-semibold">{label}</h3>
@@ -302,6 +322,12 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
                     </button>
                   </div>
                 )}
+                {isSignedForm && !locked && (
+                  <p className="mt-3 text-xs text-secondary">
+                    Unggah PDF yang telah ditandatangani penyetuju. Jika formulir dibuat ulang,
+                    unggah kembali versi persetujuan terbaru.
+                  </p>
+                )}
                 {!locked && !isForm && (
                   <div className="mt-4">
                     <FormField
@@ -312,7 +338,7 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
                         id={`file-${type}`}
                         type="file"
                         accept="application/pdf,.pdf"
-                        disabled={busy}
+                        disabled={busy || (isSignedForm && (!generatedForm || dirty))}
                         onChange={(e) => {
                           upload(e.target.files?.[0], type);
                           e.target.value = '';
@@ -333,7 +359,9 @@ function SubmissionEditor({ initial, kind }: { initial: Submission; kind: Submis
               ? 'Simpan atau buat ulang PDF setelah mengubah formulir.'
               : complete
                 ? 'Seluruh dokumen wajib telah lengkap.'
-                : 'Lengkapi semua dokumen PDF untuk mengirim pengajuan.'}
+                : 'Dokumen yang belum lengkap: ' +
+                  missingDocuments.map((d) => d.label).join(', ') +
+                  '.'}
           </p>
           <Button
             disabled={busy || !complete || dirty}

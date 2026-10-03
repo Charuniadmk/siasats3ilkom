@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import fontkit from '@pdf-lib/fontkit';
+import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { HttpError } from '../../utils/http-error.js';
 import { fillField } from './template-fields.js';
@@ -88,7 +89,30 @@ export async function generateQualificationTemplatePdf(
     720.1008,
     160,
   );
-  const image = await pdf.embedPng(signature);
+  const { data, info } = await sharp(signature, { limitInputPixels: 4_000_000 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let left = info.width,
+    top = info.height,
+    right = -1,
+    bottom = -1;
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      if (data[(y * info.width + x) * info.channels + info.channels - 1]! > 0) {
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+    }
+  }
+  if (right < left) throw new HttpError(400, 'Tanda tangan tidak memiliki gambar yang terlihat.');
+  const croppedSignature = await sharp(signature, { limitInputPixels: 4_000_000 })
+    .extract({ left, top, width: right - left + 1, height: bottom - top + 1 })
+    .png()
+    .toBuffer();
+  const image = await pdf.embedPng(croppedSignature);
   const zone = QUALIFICATION_SIGNATURE_ZONE;
   const scale = Math.min(zone.width / image.width, zone.height / image.height);
   page.drawImage(image, {

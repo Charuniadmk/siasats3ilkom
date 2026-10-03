@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { PDFArray, PDFDocument, PDFRawStream } from 'pdf-lib';
+import { PDFArray, PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
 import sharp from 'sharp';
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = randomBytes(48).toString('hex');
@@ -143,6 +143,44 @@ test('PDF formulir mengacu dokumen Proposal dan Kualifikasi dengan zona tanda ta
     );
   }
 });
+test('Tanda tangan Kualifikasi tetap di tengah meskipun PNG memiliki margin transparan tidak seimbang', async () => {
+  const padded = await sharp(signature)
+    .extend({ top: 5, bottom: 40, left: 90, right: 10, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+  const normal = await generateFormPdf('QUALIFICATION', form, student, signature);
+  const withPadding = await generateFormPdf('QUALIFICATION', form, student, padded);
+  await writeFile(resolve('test-artifacts', 'QUALIFICATION-padding.pdf'), withPadding);
+  const images = async (buffer: Buffer) => {
+    const document = await PDFDocument.load(buffer);
+    return document.context
+      .enumerateIndirectObjects()
+      .map(([, object]) => object)
+      .filter(
+        (object): object is PDFRawStream =>
+          object instanceof PDFRawStream &&
+          object.dict.get(PDFName.of('Subtype'))?.toString() === '/Image',
+      )
+      .filter(
+        (object) =>
+          Number(object.dict.get(PDFName.of('Width'))?.toString()) > 1 &&
+          Number(object.dict.get(PDFName.of('Width'))?.toString()) < 500,
+      )
+      .map((object) => ({
+        width: object.dict.get(PDFName.of('Width'))?.toString(),
+        height: object.dict.get(PDFName.of('Height'))?.toString(),
+        pixels: Buffer.from(object.getContents()).toString('base64'),
+      }));
+  };
+  const reference = await images(normal);
+  assert.ok(reference.length > 0);
+  assert.deepEqual(
+    await images(withPadding),
+    reference,
+    'Margin transparan tidak mengubah isi atau ukuran tanda tangan di PDF',
+  );
+});
+
 test('Proposal merapatkan bagian setelah alamat dan judul tanpa mengubah ukuran huruf', async () => {
   const short = await generateFormPdf('PROPOSAL', form, student, signature);
   const long = await generateFormPdf(
@@ -284,6 +322,11 @@ test(
           body: data,
         });
       };
+      const signedType =
+        path === '/proposals' ? 'SIGNED_PROPOSAL_FORM' : 'SIGNED_QUALIFICATION_FORM';
+      const wrongSignedType =
+        path === '/proposals' ? 'SIGNED_QUALIFICATION_FORM' : 'SIGNED_PROPOSAL_FORM';
+      assert.equal((await upload(signedType, validPdf)).status, 400);
       const type = path === '/proposals' ? 'PAYMENT_RECEIPT' : 'PUBLISHED_ARTICLE_DRAFT';
       assert.equal((await upload(type, signature, 'image.png', 'image/png')).status, 400);
       assert.equal((await upload(type, Buffer.from('%PDF-fake'))).status, 400);
@@ -307,7 +350,34 @@ test(
           ? ['PAYMENT_RECEIPT', 'PROPOSAL_DRAFT', 'TRANSCRIPT']
           : ['PUBLISHED_ARTICLE_DRAFT'];
       for (const kind of kinds) assert.equal((await upload(kind, validPdf)).status, 200);
+      const missingSigned = await request(me + '/submit', 'POST');
+      assert.equal(missingSigned.status, 400);
+      assert.match((await missingSigned.json()).message, /Bertanda Tangan Persetujuan/);
+      assert.equal((await upload(wrongSignedType, validPdf)).status, 400);
+      assert.equal((await upload(signedType, Buffer.from('%PDF-fake'))).status, 400);
+      assert.equal((await upload(signedType, validPdf, 'Persetujuan.pdf')).status, 200);
       let data = (await (await request(me)).json()).data;
+      const signedDoc = data.documents.find((d: { type: string }) => d.type === signedType);
+      assert.equal(
+        (await request(me + '/documents/' + signedDoc.id, 'GET', undefined, other)).status,
+        404,
+      );
+      assert.equal(
+        (await request(root + '/' + id + '/documents/' + signedDoc.id, 'GET', undefined, admin))
+          .status,
+        200,
+      );
+      const adminDetail = await (await request(root + '/' + id, 'GET', undefined, admin)).json();
+      assert.ok(adminDetail.data.documents.some((d: { type: string }) => d.type === signedType));
+      const storedSigned = await prisma.submissionDocument.findUniqueOrThrow({
+        where: { id: signedDoc.id },
+      });
+      assert.equal((await request(me + '/generate', 'POST')).status, 200);
+      const regenerated = (await (await request(me)).json()).data;
+      assert.ok(!regenerated.documents.some((d: { type: string }) => d.type === signedType));
+      await assert.rejects(access(resolve(uploadRoot, storedSigned.filePath)));
+      assert.equal((await upload(signedType, validPdf, 'Persetujuan-terbaru.pdf')).status, 200);
+      data = (await (await request(me)).json()).data;
       const doc = data.documents.find((d: { type: string }) => d.type === formType);
       assert.equal('filePath' in doc, false);
       assert.equal((await request(me + '/documents/' + doc.id)).status, 200);
@@ -339,7 +409,13 @@ test(
         200,
       );
       assert.equal((await request(me + '/submit', 'POST')).status, 400);
+      const invalidated = (await (await request(me)).json()).data.documents;
+      assert.ok(
+        !invalidated.some((d: { type: string }) => d.type === signedType || d.type === formType),
+      );
+      assert.equal((await upload(signedType, validPdf)).status, 400);
       assert.equal((await request(me + '/generate', 'POST')).status, 200);
+      assert.equal((await upload(signedType, validPdf, 'Persetujuan-baru.pdf')).status, 200);
       const submissions = await Promise.all([
         request(me + '/submit', 'POST'),
         request(me + '/submit', 'POST'),
@@ -403,6 +479,8 @@ test(
       assert.equal((await request(me, 'PATCH', form)).status, 200);
       assert.equal((await upload(type, validPdf)).status, 200);
       assert.equal((await request(me + '/generate', 'POST')).status, 200);
+      assert.equal((await request(me + '/submit', 'POST')).status, 400);
+      assert.equal((await upload(signedType, validPdf, 'Persetujuan-ulang.pdf')).status, 200);
       assert.equal((await request(me + '/submit', 'POST')).status, 200);
       const reviews = await Promise.all([
         request(root + '/' + id + '/review', 'PATCH', { decision: 'APPROVED' }, admin),

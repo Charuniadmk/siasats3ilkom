@@ -44,7 +44,15 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, genericMessage?: string)
 }
 const idParam = (value: unknown) => parse(z.uuid({ error: 'ID tidak valid.' }), value);
 const typeSchema = z.enum(
-  ['PAYMENT_RECEIPT', 'PROPOSAL_DRAFT', 'TRANSCRIPT', 'PUBLISHED_ARTICLE_DRAFT', 'SIGNATURE'],
+  [
+    'PAYMENT_RECEIPT',
+    'PROPOSAL_DRAFT',
+    'TRANSCRIPT',
+    'PUBLISHED_ARTICLE_DRAFT',
+    'SIGNATURE',
+    'SIGNED_PROPOSAL_FORM',
+    'SIGNED_QUALIFICATION_FORM',
+  ],
   { error: 'Jenis dokumen tidak valid.' },
 );
 export function createSubmissionRouter(kind: SubmissionKind, admin = false) {

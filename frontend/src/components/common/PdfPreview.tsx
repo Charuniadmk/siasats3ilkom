@@ -36,7 +36,11 @@ export default function PdfPreview({
     return () => URL.revokeObjectURL(objectUrl);
   }, [query.data]);
   return (
-    <Modal title="Pratinjau PDF" onClose={onClose} wide>
+    <Modal
+      title={document.mimeType === 'application/pdf' ? 'Pratinjau PDF' : 'Pratinjau Tanda Tangan'}
+      onClose={onClose}
+      wide
+    >
       <p className="mb-3 break-all text-sm text-secondary">{document.fileName}</p>
       {query.isPending && <p role="status">Memuat PDF...</p>}
       {(query.isError || error) && (
@@ -70,7 +74,7 @@ export default function PdfPreview({
             );
           }}
         >
-          Unduh PDF
+          {document.mimeType === 'application/pdf' ? 'Unduh PDF' : 'Unduh Tanda Tangan'}
         </button>
       </div>
     </Modal>

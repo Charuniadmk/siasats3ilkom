@@ -57,7 +57,7 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
     await page.route('**/api/' + path + '/me**', async (route) => {
       const url = new URL(route.request().url());
       if (url.pathname.endsWith('/submit')) {
-        expect(current.documents.length).toBe(kind === 'PROPOSAL' ? 5 : 3);
+        expect(current.documents.length).toBe(kind === 'PROPOSAL' ? 6 : 4);
         current = {
           ...current,
           status: 'PENDING',
@@ -135,6 +135,18 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
         .setInputFiles({ name: 'Lampiran.pdf', mimeType: 'application/pdf', buffer: pdf });
       await expect(page.getByRole('status')).toHaveText('Dokumen berhasil diunggah.');
     }
+    const signedLabel =
+      kind === 'PROPOSAL'
+        ? 'Formulir Proposal Bertanda Tangan Persetujuan'
+        : 'Form Kualifikasi Bertanda Tangan Persetujuan';
+    await expect(page.getByRole('button', { name: 'Kirim Pengajuan', exact: true })).toBeDisabled();
+    await expect(
+      page.getByText('Dokumen yang belum lengkap: ' + signedLabel + '.', { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByLabel('Unggah ' + signedLabel, { exact: true })
+      .setInputFiles({ name: 'Persetujuan.pdf', mimeType: 'application/pdf', buffer: pdf });
+    await expect(page.getByRole('status')).toHaveText('Dokumen berhasil diunggah.');
     await page.getByRole('button', { name: 'Pratinjau PDF', exact: true }).first().click();
     await expect(page.getByRole('dialog', { name: 'Pratinjau PDF' })).toBeVisible();
     await expect(page.locator('iframe')).toHaveAttribute('src', /^blob:/);
@@ -160,6 +172,13 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
     ).toBeDisabled();
     await page.getByRole('button', { name: 'Buat PDF Formulir', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('PDF formulir berhasil dibuat.');
+    await expect(
+      page.getByRole('button', { name: 'Kirim Ulang Pengajuan', exact: true }),
+    ).toBeDisabled();
+    await page
+      .getByLabel('Unggah ' + signedLabel, { exact: true })
+      .setInputFiles({ name: 'Persetujuan-ulang.pdf', mimeType: 'application/pdf', buffer: pdf });
+    await expect(page.getByRole('status')).toHaveText('Dokumen berhasil diunggah.');
     await page.getByRole('button', { name: 'Kirim Ulang Pengajuan', exact: true }).click();
     await expect(page.getByText('Menunggu Pemeriksaan', { exact: true })).toBeVisible();
     current = { ...current, status: 'APPROVED' };
@@ -191,7 +210,22 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
       status,
       student,
       formData: form,
-      documents: [doc],
+      documents: [
+        doc,
+        {
+          ...doc,
+          id: 'signed-test',
+          type: kind === 'PROPOSAL' ? 'SIGNED_PROPOSAL_FORM' : 'SIGNED_QUALIFICATION_FORM',
+          fileName: 'Persetujuan.pdf',
+        },
+        {
+          ...doc,
+          id: 'signature-test',
+          type: 'SIGNATURE',
+          fileName: 'signature.png',
+          mimeType: 'image/png',
+        },
+      ],
       submittedAt: '2026-10-04T10:00:00Z',
       rejectionReason: status === 'REJECTED' ? 'Perbaiki lampiran.' : null,
     });
@@ -228,7 +262,14 @@ for (const kind of ['PROPOSAL', 'QUALIFICATION']) {
     await page.getByRole('option', { name: 'Menunggu Pemeriksaan', exact: true }).click();
     await page.getByRole('link', { name: 'Lihat Detail', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Data Mahasiswa', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Pratinjau PDF', exact: true }).click();
+    await expect(page.getByText('Persetujuan.pdf', { exact: true })).toBeVisible();
+    for (const index of [0, 1]) {
+      await page.getByRole('button', { name: 'Pratinjau PDF', exact: true }).nth(index).click();
+      await expect(page.locator('iframe')).toHaveAttribute('src', /^blob:/);
+      await page.getByRole('button', { name: 'Tutup Pratinjau', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Pratinjau Tanda Tangan', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Pratinjau Tanda Tangan' })).toBeVisible();
     await expect(page.locator('iframe')).toHaveAttribute('src', /^blob:/);
     await page.getByRole('button', { name: 'Tutup Pratinjau', exact: true }).click();
     await page.getByRole('button', { name: 'Tolak', exact: true }).click();

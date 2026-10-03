@@ -348,11 +348,11 @@ Requirement pengajuan terbaru menggantikan rancangan submenu akademik pada bagia
 
 ### Flow pengajuan
 
-Proposal mewajibkan Formulir Proposal yang dibuat aplikasi, Kuitansi Pembayaran PDF, Draft Proposal PDF, dan Transkrip Nilai PDF. Kualifikasi mewajibkan Form Kualifikasi yang dibuat aplikasi dan Draft Artikel yang Dipublikasikan PDF. Form memuat kontak, judul, pembimbing, program studi, kota, dan tanggal, dengan identitas dari profil mahasiswa. Date picker dan input memakai komponen reusable.
+Proposal mewajibkan Formulir Proposal hasil generate, Formulir Proposal Bertanda Tangan Persetujuan yang diunggah kembali, Kuitansi Pembayaran PDF, Draft Proposal PDF, dan Transkrip Nilai PDF. Kualifikasi mewajibkan Form Kualifikasi hasil generate, Form Kualifikasi Bertanda Tangan Persetujuan yang diunggah kembali, dan Draft Artikel yang Dipublikasikan PDF. Mahasiswa mengunduh formulir, meminta tanda tangan penyetuju melalui hasil cetak/pindai atau PDF digital, lalu mengunggah PDF persetujuan pada kolom terpisah. Form memuat kontak, judul, pembimbing, program studi, kota, dan tanggal, dengan identitas dari profil mahasiswa. Date picker dan input memakai komponen reusable.
 
 Mahasiswa dapat menyimpan draft yang belum lengkap. Unggah tanda tangan PNG transparan sebelum membuat PDF. PNG maksimal 2 MB, maksimal 4 juta piksel, memiliki transparansi dan isi terlihat. Backend menormalisasi PNG dan menempatkannya dengan rasio asli dalam area mahasiswa. Proposal memakai zona 160 x 24 pt pada kedua halaman. Pada halaman pertama x=324.1, y=642; pada halaman kedua x=72.1, y=427 (koordinat dari kiri atas). Kualifikasi memakai zona tetap x=72.1, y=507, lebar=160, tinggi=42 pt dari kiri atas, di atas nama mahasiswa dan bagian persetujuan. Request tidak menerima posisi atau ukuran tanda tangan. Sumber PNG tidak menjadi dokumen pengajuan final.
 
-Perubahan isi form atau tanda tangan membatalkan PDF form sebelumnya. Mahasiswa harus membuat ulang PDF. Proposal tetap dua halaman: data yang tidak muat ditolak dengan pesan untuk meringkas isi, tanpa mengubah ukuran huruf atau memotong teks. Kualifikasi tetap satu halaman; judul dapat mengisi hingga tiga baris. Isian yang tidak muat ditolak dengan pesan Bahasa Indonesia, tanpa memotong teks atau mengubah font. Setelah semua dokumen lengkap, Kirim Pengajuan aktif. Backend memeriksa ulang kelengkapan dan validitas PDF saat pengiriman.
+Perubahan isi form atau PNG tanda tangan membatalkan PDF hasil generate dan PDF persetujuan sebelumnya. Membuat ulang PDF juga membatalkan PDF persetujuan, sehingga mahasiswa harus meminta persetujuan dan mengunggah versi terbaru. Mahasiswa harus membuat ulang PDF. Proposal tetap dua halaman: data yang tidak muat ditolak dengan pesan untuk meringkas isi, tanpa mengubah ukuran huruf atau memotong teks. Kualifikasi tetap satu halaman; judul dapat mengisi hingga tiga baris. Isian yang tidak muat ditolak dengan pesan Bahasa Indonesia, tanpa memotong teks atau mengubah font. Setelah semua dokumen lengkap, Kirim Pengajuan aktif. Backend memeriksa ulang kelengkapan dan validitas PDF saat pengiriman.
 
 | Status internal | Label | Hak mahasiswa |
 |---|---|---|
@@ -380,7 +380,7 @@ Gunakan `{module}` = `proposals` atau `qualifications`:
 | GET | `/api/admin/{module}/:id/documents/:documentId` | Dokumen pengajuan untuk Admin |
 | PATCH | `/api/admin/{module}/:id/review` | `{decision:"APPROVED"}` atau `{decision:"REJECTED",reason:"..."}` |
 
-Jenis unggahan Proposal: PAYMENT_RECEIPT, PROPOSAL_DRAFT, TRANSCRIPT. Kualifikasi: PUBLISHED_ARTICLE_DRAFT. Kedua modul menerima SIGNATURE sebagai sumber PNG. PROPOSAL_FORM/QUALIFICATION_FORM tidak dapat diunggah manual. Daftar mendukung `search`, `status`, `page`, `limit`, `sortBy` (fullName/nim/submittedAt/status), `sortOrder` (asc/desc).
+Jenis unggahan Proposal: SIGNED_PROPOSAL_FORM, PAYMENT_RECEIPT, PROPOSAL_DRAFT, TRANSCRIPT. Kualifikasi: SIGNED_QUALIFICATION_FORM, PUBLISHED_ARTICLE_DRAFT. Unggahan formulir persetujuan memerlukan formulir hasil generate pada pengajuan yang sama. Kedua modul menerima SIGNATURE sebagai sumber PNG. PROPOSAL_FORM/QUALIFICATION_FORM tidak dapat diunggah manual. Daftar mendukung `search`, `status`, `page`, `limit`, `sortBy` (fullName/nim/submittedAt/status), `sortOrder` (asc/desc).
 
 ### Pratinjau, penyimpanan, dan review
 
@@ -428,3 +428,9 @@ Pada halaman kedua Proposal, kalimat penutup mengikuti jumlah baris judul. Posis
 ### Template PDF Kualifikasi
 
 `backend/scripts/prepare-qualification-template.py path/to/export.pdf` menyiapkan template dari PDF ekspor `FORM UJIAN KUALIFIKASI.docx` (memerlukan PyMuPDF saat persiapan saja). Konversi acuan menggunakan Calibri dan Lato asli. Teks kop diletakkan di depan gambar grup agar tidak tertutup hasil konversi; placeholder bawaan `[Type here]` dihapus. Runtime memakai pdf-lib dan font Calibri dari `QUALIFICATION_CALIBRI_FONT_PATH`, lalu `PROPOSAL_CALIBRI_FONT_PATH`, atau folder Fonts Windows. Lato kop sudah tertanam pada aset PDF. Hash dokumen sumber diperiksa melalui `qualification-template.json`.
+
+### Kelengkapan dan pemeriksaan formulir persetujuan
+
+Frontend menampilkan nama seluruh dokumen yang kurang dan menonaktifkan tombol kirim sampai lengkap. Backend memeriksa kembali dokumen wajib, keterbacaan file PDF, ownership, dan status pengajuan; PDF hasil generate saja tidak cukup untuk dikirim. Admin dapat melihat dan mengunduh semua dokumen, termasuk formulir hasil generate, formulir persetujuan, lampiran, dan PNG sumber tanda tangan. Tanda tangan penyetuju diperiksa secara visual oleh Admin; aplikasi tidak menyimpulkan bahwa PDF otomatis sudah ditandatangani hanya karena berhasil diunggah.
+
+Migrasi `20261004000300_add_signed_submission_forms` menambah jenis SIGNED_PROPOSAL_FORM dan SIGNED_QUALIFICATION_FORM tanpa mengubah berkas lama. Migrasi sudah diterapkan pada database lokal; jalankan `npm --prefix backend run prisma:deploy` di lingkungan lain.
