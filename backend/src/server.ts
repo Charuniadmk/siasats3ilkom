@@ -1,7 +1,9 @@
 import { app } from './app.js';
 import { env } from './config/env.js';
+import { disconnectPrisma } from './config/prisma.js';
 
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, (error?: Error) => {
+  if (error) return;
   console.log(`Server berjalan di http://localhost:${env.PORT}`);
 });
 
@@ -11,7 +13,7 @@ server.on('error', (error) => {
 });
 
 const shutdown = () => {
-  server.close(() => process.exit(0));
+  server.close(() => { void disconnectPrisma().finally(() => process.exit(0)); });
   setTimeout(() => process.exit(1), 10000).unref();
 };
 

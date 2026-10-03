@@ -3,35 +3,53 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "dev": "prisma generate && tsx watch src/server.ts",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "lint": "eslint .",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "prisma:deploy": "prisma migrate deploy",
+    "account:create": "prisma generate && tsx src/scripts/create-account.ts",
+    "test": "prisma generate && tsx --test tests/auth.test.ts"
   },
   "dependencies": {
-    "@prisma/client": "^7.0.0",
     "@prisma/adapter-mariadb": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.3",
     "zod": "^4.1.0"
   },
   "overrides": {
-    "@prisma/adapter-mariadb": { "mariadb": "^3.5.4" },
-    "@prisma/config": { "deepmerge-ts": "^8.0.2" },
-    "prisma": { "mysql2": "^3.24.5" }
+    "@prisma/adapter-mariadb": {
+      "mariadb": "^3.5.4"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.2"
+    },
+    "prisma": {
+      "mysql2": "^3.24.5"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.18.0",
     "eslint": "^9.39.0",
     "globals": "^16.4.0",

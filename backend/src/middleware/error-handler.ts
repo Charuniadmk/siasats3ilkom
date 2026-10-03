@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import { HttpError } from '../utils/http-error.js';
 
 export const notFound: RequestHandler = (_req, res) => {
   res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan.' });
@@ -7,6 +8,11 @@ export const notFound: RequestHandler = (_req, res) => {
 export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, next) => {
   if (res.headersSent) {
     next(error);
+    return;
+  }
+
+  if (error instanceof HttpError) {
+    res.status(error.status).json({ success: false, message: error.message });
     return;
   }
 

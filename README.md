@@ -1,12 +1,12 @@
 # Sistem Manajemen Mahasiswa Doktor
 
-Fondasi aplikasi manajemen akademik mahasiswa doktor. Tahap ini hanya menyediakan lingkungan pengembangan, halaman verifikasi, dan endpoint health. Fitur aplikasi, autentikasi, model database, dan seed belum dibuat.
+Sistem manajemen akademik mahasiswa doktor dengan halaman login Admin (username dan password) serta Mahasiswa (NIM dan password). Autentikasi menggunakan MySQL, bcrypt, dan JWT dalam cookie HttpOnly. Admin memiliki sidebar, header, halaman sambutan, serta menu untuk menambah dan melihat akun mahasiswa. Fitur akademik lainnya masih berupa halaman placeholder; mahasiswa melihat konfirmasi sesi sederhana.
 
 ## Teknologi dan persyaratan
 
 Frontend: React 19, TypeScript, Vite 7, Tailwind CSS 4, React Router, Axios, TanStack Query, React Hook Form, Zod, Lucide React, dan Inter lokal.
 
-Backend: Node.js, TypeScript, Express 5, Prisma 7, adapter MySQL/MariaDB, MySQL, Zod, CORS, dan dotenv. Kedua aplikasi menggunakan TypeScript strict dan ESLint.
+Backend: Node.js, TypeScript, Express 5, Prisma 7, adapter MySQL/MariaDB, MySQL, Zod, CORS, dotenv, bcrypt, jsonwebtoken, cookie-parser, dan express-rate-limit. Kedua aplikasi menggunakan TypeScript strict dan ESLint. Pengujian memakai Node.js Test Runner dan Playwright.
 
 Gunakan Node.js 22.12+ atau 24+ (disarankan 24 LTS), npm, pnpm 11.20.0, dan MySQL 8+. Di PowerShell yang membatasi skrip `.ps1`, gunakan `npm.cmd`, `npx.cmd`, dan `pnpm.cmd`.
 
@@ -26,12 +26,12 @@ doctor-student-management/
 │   ├── src/
 │   │   ├── assets/
 │   │   ├── components/{ui,layout,forms,common}/
-│   │   ├── features/
+│   │   ├── features/                # auth/ dan students/
 │   │   ├── hooks/
-│   │   ├── layouts/
+│   │   ├── layouts/                 # AdminLayout
 │   │   ├── lib/                     # Axios dan QueryClient
-│   │   ├── pages/                   # Hanya SetupPage
-│   │   ├── routes/                  # Hanya /
+│   │   ├── pages/                   # Login, halaman admin, akun mahasiswa
+│   │   ├── routes/                  # Routing dengan pembatasan role
 │   │   ├── services/
 │   │   ├── stores/
 │   │   ├── types/
@@ -48,12 +48,13 @@ doctor-student-management/
 │   └── index.html
 └── backend/
     ├── prisma/
-    │   ├── schema.prisma            # MySQL, tanpa model
-    │   └── migrations/              # Masih kosong
+    │   ├── schema.prisma            # MySQL, model User dan enum Role
+    │   └── migrations/              # Migrasi tabel akun
     ├── src/
     │   ├── config/
     │   ├── middleware/
-    │   ├── modules/
+    │   ├── modules/                 # auth/ dan students/
+    │   ├── scripts/                 # Pembuatan akun melalui terminal
     │   ├── routes/
     │   ├── services/
     │   ├── types/
@@ -107,7 +108,7 @@ Isi `frontend/.env`:
 VITE_API_URL=http://localhost:3000/api
 ```
 
-Variabel `VITE_*` masuk ke browser, sehingga jangan berisi rahasia. Restart Vite setelah environment berubah. Route `/` berisi halaman verifikasi saja, tanpa query API. TanStack Query provider dan Axios sudah disiapkan. Tailwind menggunakan plugin Vite, warna dari `AGENTS.md`, dan font Inter yang disajikan secara lokal.
+Variabel `VITE_*` masuk ke browser, sehingga jangan berisi rahasia. Restart Vite setelah environment berubah. Route `/login` menyediakan pilihan Admin dan Mahasiswa. Route `/` memeriksa sesi melalui `/api/auth/me`; Admin diarahkan ke `/dashboard`, sedangkan pengguna yang belum masuk diarahkan ke login. Tailwind menggunakan plugin Vite, warna dari `AGENTS.md`, dan font Inter yang disajikan secara lokal.
 
 ## Membuat database MySQL
 
@@ -125,7 +126,7 @@ CREATE DATABASE doctor_student_management
   COLLATE utf8mb4_unicode_ci;
 ```
 
-Database pada tahap ini belum memiliki tabel aplikasi.
+Tabel akun akan dibuat oleh migrasi pada langkah Prisma di bawah. NIM disimpan sebagai teks agar nol di awal tetap dipertahankan.
 
 ## Setup dan menjalankan backend
 
@@ -143,9 +144,19 @@ Isi `backend/.env`:
 PORT=3000
 DATABASE_URL=mysql://root:password@localhost:3306/doctor_student_management
 FRONTEND_URL=http://localhost:5173
+JWT_SECRET=
+JWT_EXPIRES_IN=1d
 ```
 
-Ganti username/password sesuai MySQL lokal. Encode karakter khusus dalam URL, misalnya `@` menjadi `%40`. `FRONTEND_URL` merupakan origin yang diizinkan CORS. File `.env` diabaikan Git; `.env.example` hanya berisi contoh.
+Ganti username/password sesuai MySQL lokal. Encode karakter khusus dalam URL, misalnya `@` menjadi `%40`. `FRONTEND_URL` merupakan origin yang diizinkan CORS dan operasi login/logout. File `.env` diabaikan Git; `.env.example` hanya berisi contoh.
+
+Isi `JWT_SECRET` dengan nilai acak minimal 32 karakter. Untuk membuat nilainya secara lokal:
+
+```sh
+node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
+```
+
+Salin hasilnya ke `JWT_SECRET` dalam `.env`, lalu restart backend. Jangan commit atau membagikan nilai tersebut. `JWT_EXPIRES_IN` mendukung durasi seperti `30m`, `12h`, atau `1d`. Pada HTTPS produksi, gunakan `NODE_ENV=production` agar cookie memakai flag Secure.
 
 ```sh
 npm run dev
@@ -158,20 +169,21 @@ npm run build
 npm run start
 ```
 
-Backend memvalidasi environment melalui Zod. `PORT` dan `FRONTEND_URL` memiliki default lokal. `DATABASE_URL` boleh belum diisi untuk menjalankan health server, karena belum ada akses database aplikasi; isi sebelum operasi Prisma yang mengakses database.
+Backend memvalidasi environment melalui Zod. `PORT` dan `FRONTEND_URL` memiliki default lokal. `DATABASE_URL` dan `JWT_SECRET` harus tersedia untuk login; health server tetap dapat dijalankan tanpa keduanya.
 
 ## Prisma
 
-Prisma 7 menyimpan provider MySQL di `prisma/schema.prisma`, sedangkan URL berasal dari `DATABASE_URL` melalui `prisma.config.ts`. Adapter MySQL telah terpasang untuk pengembangan modul database selanjutnya.
+Prisma 7 menyimpan provider MySQL di `prisma/schema.prisma`, sedangkan URL berasal dari `DATABASE_URL` melalui `prisma.config.ts`. Adapter MySQL digunakan oleh modul autentikasi untuk mengakses tabel akun.
 
 Dari `backend`:
 
 ```sh
 npm run prisma:validate
+npm run prisma:deploy
 npm run prisma:generate
 ```
 
-Client dibuat di `src/generated/prisma` dan diabaikan Git. Schema sengaja tanpa model. Validasi dan generate tidak menguji koneksi MySQL aktif.
+Migrasi membuat tabel `User` dengan role `ADMIN`/`STUDENT`, username/NIM unik, hash password, dan versi sesi. Client dibuat di `src/generated/prisma` dan diabaikan Git. Perintah development, build, typecheck, test, serta pembuatan akun otomatis melakukan generate. Validasi dan generate sendiri tidak menguji koneksi MySQL aktif.
 
 `package.json` backend menetapkan override untuk `mariadb`, `mysql2`, dan `deepmerge-ts` agar dependency transitif Prisma menggunakan versi yang memperbaiki kerentanan audit. Validasi dan generate Prisma telah diperiksa dengan versi tersebut. Pertahankan lockfile dan periksa kembali override saat memperbarui Prisma.
 
@@ -190,7 +202,49 @@ npm run prisma:migrate -- --name init
 npm run prisma:studio
 ```
 
-Jalankan migrasi setelah model ditambahkan dan database tujuan diperiksa. Migrasi pengembangan dapat membutuhkan izin membuat shadow database. Belum ada migrasi maupun seed yang dijalankan otomatis.
+Untuk checkout baru, gunakan `prisma:deploy` untuk menerapkan migrasi yang sudah disimpan. `prisma:migrate` digunakan ketika mengembangkan perubahan model baru dan dapat membutuhkan izin membuat shadow database. `pnpm run dev` tidak menjalankan migrasi atau membuat akun otomatis.
+
+## Membuat akun dan login
+
+Setelah environment diisi dan migrasi diterapkan, jalankan dari root repository:
+
+```sh
+npm --prefix backend run account:create -- --role ADMIN --identifier admin
+npm --prefix backend run account:create -- --role STUDENT --identifier 00123456
+```
+
+Ganti identifier sesuai username admin atau NIM mahasiswa yang sebenarnya. Terminal meminta password dan konfirmasinya tanpa menampilkan isi password. Password minimal 8 karakter dan maksimal 72 byte. Perintah hanya membuat akun baru dan menolak username/NIM yang sudah digunakan; tidak mengubah akun lama. Tidak ada akun atau password bawaan.
+
+Username admin dinormalisasi menjadi huruf kecil dan dapat berisi huruf, angka, titik, garis bawah, serta tanda hubung. NIM hanya boleh berisi angka, termasuk nol di awal. Pilih jenis akun yang sesuai pada http://localhost:5173/login.
+
+JWT tidak dikirim ke JavaScript browser atau disimpan di localStorage. Cookie sesi memakai HttpOnly dan SameSite=Lax; flag Secure aktif pada produksi. Backend memeriksa pengguna dan role dari database pada setiap pemeriksaan sesi. Keluar akan mencabut semua sesi akun tersebut. Percobaan login dibatasi 20 per 15 menit per IP; limiter saat ini menggunakan memori satu proses.
+
+| Endpoint autentikasi | Fungsi |
+|---|---|
+| `POST /api/auth/login` | Masuk dengan `{ role: "ADMIN", username, password }` atau `{ role: "STUDENT", nim, password }` |
+| `GET /api/auth/me` | Memeriksa cookie sesi dan mengembalikan akun tanpa hash password |
+| `POST /api/auth/logout` | Mencabut sesi dan menghapus cookie |
+
+Request POST login/logout harus membawa header `Origin` yang sesuai `FRONTEND_URL`; Axios browser menanganinya otomatis. Endpoint yang dilindungi memakai middleware `authenticate`, sedangkan endpoint mahasiswa juga memakai `authorize('ADMIN')`.
+
+## Sidebar admin dan akun mahasiswa
+
+Setelah login sebagai Admin, aplikasi membuka `/dashboard` dengan sidebar dan header. Header menampilkan akun aktif, jejak halaman, serta tombol keluar. Sidebar menjadi drawer pada mobile dan dapat ditutup dengan Escape. Menu dan submenu berasal dari satu konfigurasi `frontend/src/components/layout/navigation.ts`:
+
+- Dashboard.
+- Mahasiswa: Daftar Mahasiswa dan Tambah Akun.
+- Proposal: Isi Form, LOA Conference → Kuitansi Pembayaran, Draft Proposal, dan Lulus Ujian → Transkrip Nilai.
+- Kualifikasi: Isi Form Kualifikasi dan Draft Artikel yang Dipublish.
+- Dosen dan Ruangan.
+
+Untuk membuat akun mahasiswa melalui aplikasi, buka **Mahasiswa → Tambah Akun**, lalu isi NIM, password minimal 8 karakter (maksimal 72 byte), dan konfirmasi password. Akun otomatis mendapat role Mahasiswa; NIM duplikat ditolak. Setelah tersimpan, akun muncul pada daftar mahasiswa dan dapat masuk melalui pilihan Mahasiswa di halaman login. Daftar mendukung pencarian NIM dan pagination.
+
+| Endpoint mahasiswa | Fungsi |
+|---|---|
+| `GET /api/students?page=1&limit=20&search=` | Daftar akun mahasiswa, hanya untuk Admin |
+| `POST /api/students` | Membuat akun dengan `{ nim, password }`, hanya untuk Admin |
+
+POST mahasiswa juga wajib membawa Origin yang sesuai konfigurasi. Backend menetapkan role `STUDENT` dan tidak menerima role dari input. Password maupun hash tidak disertakan pada respons daftar atau pembuatan akun. Tidak ada perubahan schema atau migrasi tambahan untuk fitur ini. Halaman Proposal, Kualifikasi, Dosen, dan Ruangan masih berupa placeholder.
 
 ## URL pengembangan
 
@@ -200,7 +254,7 @@ Jalankan migrasi setelah model ditambahkan dan database tujuan diperiksa. Migras
 | Backend / prefix API | http://localhost:3000/api |
 | Health check | http://localhost:3000/api/health |
 
-Prefix `/api` bukan endpoint tersendiri. Satu-satunya endpoint adalah `GET /api/health`:
+Prefix `/api` bukan endpoint tersendiri. `GET /api/health` tetap tersedia:
 
 ```json
 {
@@ -228,3 +282,26 @@ Invoke-RestMethod http://localhost:3000/api/health
 ```
 
 Tidak ada aset demo atau counter Vite. Pengembangan fitur dilanjutkan pada tugas berikutnya sesuai `AGENTS.md`.
+
+Pengujian autentikasi dari `backend`:
+
+```sh
+npm test
+```
+
+Untuk menyertakan pengujian integrasi MySQL di database pengembangan yang sudah dimigrasikan, jalankan melalui PowerShell:
+
+```powershell
+$env:AUTH_DATABASE_TESTS='1'
+npm test
+Remove-Item Env:AUTH_DATABASE_TESTS
+```
+
+Tes integrasi membuat akun sementara dengan password acak dan menghapusnya setelah selesai. Tes juga memeriksa bahwa hanya Admin dapat membuat akun mahasiswa, NIM duplikat ditolak, dan mahasiswa yang dibuat dapat login. Pengujian browser dari `frontend`:
+
+```sh
+npx playwright install chromium
+npm run test:e2e
+```
+
+Tes browser menggunakan respons API terkontrol untuk menguji login, sidebar bertingkat, header, drawer mobile, pembuatan akun, NIM duplikat, pembatasan role, dan sesi yang kedaluwarsa. Jika Chrome sudah terpasang, gunakan `$env:PLAYWRIGHT_BROWSER_CHANNEL='chrome'` sebelum menjalankan tes tanpa mengunduh Chromium.
